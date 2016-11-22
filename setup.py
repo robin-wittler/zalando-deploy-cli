@@ -19,7 +19,7 @@ def read_version(package):
                 return line.split()[-1].strip().strip("'")
 
 
-version = 0.2
+version = read_version('zalando_deploy_cli')
 
 py_major_minor_version = tuple(int(v.rstrip('+')) for v in platform.python_version_tuple()[:2])
 
@@ -72,9 +72,8 @@ setup(
     url='https://github.com/zalando-incubator/zalando-deploy-cli',
     keywords='',
     license='',
-    setup_requires=['flake8'],
     install_requires=get_install_requirements('requirements.txt'),
-    tests_require=['pytest-cov', 'pytest', 'mock', 'decorator'],
+    tests_require=['pytest-cov', 'pytest'],
     cmdclass={'test': PyTest},
     test_suite='tests',
     classifiers=[
