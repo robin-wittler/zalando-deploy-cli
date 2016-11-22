@@ -143,25 +143,27 @@ def wait_for_deployment(config, application, version, release, timeout, interval
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
     subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
+    deployment_name = '{}-{}-{}'.format(application, version, release)
     cutoff = time.time() + timeout
     while time.time() < cutoff:
         cmd = ['zkubectl', 'get', 'pods', '--namespace={}'.format(namespace),
                '-l', 'application={},version={},release={}'.format(application, version, release), '-o', 'json']
         out = subprocess.check_output(cmd)
         data = json.loads(out.decode('utf-8'))
-        all_ready = True
         pods = data['items']
-        # TODO: check container states too
+        pods_ready = 0
         for pod in pods:
-            if pod['status'].get('phase') != 'Running':
-                all_ready = False
-            for cont in pod['status'].get('containerStatuses', []):
-                if not cont.get('ready'):
-                    all_ready = False
-        if pods and all_ready:
+            if pod['status'].get('phase') == 'Running':
+                all_containers_ready = True
+                for cont in pod['status'].get('containerStatuses', []):
+                    if not cont.get('ready'):
+                        all_containers_ready = False
+                if all_containers_ready:
+                    pods_ready += 1
+        if pods and pods_ready >= len(pods):
             return
-        info('Waiting up to {:.0f} more secs '
-             'for deployment {}-{}-{}..'.format(cutoff - time.time(), application, version, release))
+        info('Waiting up to {:.0f} more secs for deployment '
+             '{} ({}/{} pods ready)..'.format(cutoff - time.time(), deployment_name, pods_ready, len(pods)))
         time.sleep(interval)
     raise click.Abort()
 
@@ -179,25 +181,42 @@ def switch_deployment(config, application, version, release, ratio, execute):
     # TODO: api server needs to come from Cluster Registry
     subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
 
-    replicas, total = ratio.split('/')
-    replicas = int(replicas)
+    target_replicas, total = ratio.split('/')
+    target_replicas = int(target_replicas)
     total = int(total)
 
-    deployment_name = '{}-{}-{}'.format(application, version, release)
+    cmd = ['zkubectl', 'get', 'deployments', '--namespace={}'.format(namespace),
+           '-l', 'application={}'.format(application), '-o', 'json']
+    out = subprocess.check_output(cmd)
+    data = json.loads(out.decode('utf-8'))
+    deployments = data['items']
+    target_deployment_name = '{}-{}-{}'.format(application, version, release)
 
-    token = zign.api.get_token('uid', ['uid'])
-    headers = {'Authorization': 'Bearer {}'.format(token), 'Content-Type': 'application/json'}
-    api_url = config.get('deploy_api')
-    cluster_id = config.get('kubernetes_cluster')
-    namespace = config.get('kubernetes_namespace')
-    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = requests.patch(url, headers=headers, data=json.dumps(
-        get_scaling_operation(replicas, deployment_name)), timeout=5)
-    response.raise_for_status()
-    change_request_id = response.json()['id']
+    remaining_replicas = total
+    for deployment in sorted(deployments, key=lambda d: d['metadata']['name'], reverse=True):
+        deployment_name = deployment['metadata']['name']
+        if deployment_name == target_deployment_name:
+            replicas = target_replicas
+        else:
+            # maybe spread across all other deployments?
+            replicas = remaining_replicas
 
-    if execute:
-        approve_and_execute(api_url, change_request_id)
+        remaining_replicas -= replicas
+
+        info('Scaling deployment {} to {} replicas..'.format(deployment['metadata']['name'], replicas))
+        token = zign.api.get_token('uid', ['uid'])
+        headers = {'Authorization': 'Bearer {}'.format(token), 'Content-Type': 'application/json'}
+        api_url = config.get('deploy_api')
+        cluster_id = config.get('kubernetes_cluster')
+        namespace = config.get('kubernetes_namespace')
+        url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
+        response = requests.patch(url, headers=headers, data=json.dumps(
+            get_scaling_operation(replicas, deployment_name)), timeout=5)
+        response.raise_for_status()
+        change_request_id = response.json()['id']
+
+        if execute:
+            approve_and_execute(api_url, change_request_id)
 
 
 @cli.command('render-template')
