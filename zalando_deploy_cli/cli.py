@@ -91,6 +91,8 @@ def apply(config, template, parameter, execute):
 
     if execute:
         approve_and_execute(api_url, change_request_id)
+    else:
+        print(change_request_id)
 
 
 @cli.command('create-deployment')
@@ -203,7 +205,7 @@ def switch_deployment(config, application, version, release, ratio, execute):
 
         remaining_replicas -= replicas
 
-        info('Scaling deployment {} to {} replicas..'.format(deployment['metadata']['name'], replicas))
+        info('Scaling deployment {} to {} replicas..'.format(deployment_name, replicas))
         token = zign.api.get_token('uid', ['uid'])
         headers = {'Authorization': 'Bearer {}'.format(token), 'Content-Type': 'application/json'}
         api_url = config.get('deploy_api')
@@ -217,6 +219,48 @@ def switch_deployment(config, application, version, release, ratio, execute):
 
         if execute:
             approve_and_execute(api_url, change_request_id)
+        else:
+            print(change_request_id)
+
+
+@cli.command('delete-old-deployments')
+@click.argument('application')
+@click.argument('version')
+@click.argument('release')
+@click.pass_obj
+@click.option('--execute', is_flag=True)
+def delete_old_deployments(config, application, version, release, execute):
+    '''Delete old releases'''
+    namespace = config.get('kubernetes_namespace')
+    # TODO: api server needs to come from Cluster Registry
+    subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
+
+    cmd = ['zkubectl', 'get', 'deployments', '--namespace={}'.format(namespace),
+           '-l', 'application={}'.format(application), '-o', 'json']
+    out = subprocess.check_output(cmd)
+    data = json.loads(out.decode('utf-8'))
+    deployments = data['items']
+    target_deployment_name = '{}-{}-{}'.format(application, version, release)
+
+    for deployment in sorted(deployments, key=lambda d: d['metadata']['name'], reverse=True):
+        deployment_name = deployment['metadata']['name']
+        if deployment_name != target_deployment_name:
+            info('Deleting deployment {}..'.format(deployment_name))
+            token = zign.api.get_token('uid', ['uid'])
+            headers = {'Authorization': 'Bearer {}'.format(token)}
+            api_url = config.get('deploy_api')
+            cluster_id = config.get('kubernetes_cluster')
+            namespace = config.get('kubernetes_namespace')
+            url = '{}/kubernetes-clusters/{}/namespaces/{}/deployments/{}'.format(
+                api_url, cluster_id, namespace, deployment_name)
+            response = requests.delete(url, headers=headers, timeout=5)
+            response.raise_for_status()
+            change_request_id = response.json()['id']
+
+            if execute:
+                approve_and_execute(api_url, change_request_id)
+            else:
+                print(change_request_id)
 
 
 @cli.command('render-template')
