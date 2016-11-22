@@ -74,7 +74,7 @@ def configure(config, **kwargs):
 @click.option('--execute', is_flag=True)
 def apply(config, template, parameter, execute):
     '''Apply CloudFormation or Kubernetes resource'''
-    data = render_template(template, parse_parameters(parameter))
+    data = _render_template(template, parse_parameters(parameter))
 
     token = zign.api.get_token('uid', ['uid'])
     headers = {'Authorization': 'Bearer {}'.format(token), 'Content-Type': 'application/json'}
@@ -107,7 +107,7 @@ def create_deployment(config, template, application, version, release, parameter
     context['application'] = application
     context['version'] = version
     context['release'] = release
-    data = render_template(template, context)
+    data = _render_template(template, context)
 
     token = zign.api.get_token('uid', ['uid'])
     headers = {'Authorization': 'Bearer {}'.format(token), 'Content-Type': 'application/json'}
