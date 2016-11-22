@@ -36,6 +36,11 @@ def render_template(template, context):
     return data
 
 
+def get_scaling_operation(replicas, deployment_name):
+    return {'resource_update': [{'kind': 'deployments', 'name': deployment_name,
+            'operations': [{'op': 'replace', 'path': '/spec/replicas', 'value': replicas}]}]}
+
+
 @click.group()
 @click.pass_context
 def cli(ctx):
@@ -120,7 +125,7 @@ def create_deployment(config, template, application, version, release, parameter
 def wait_for_deployment(config, application, version, release):
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
-    subprocess.check_output(['zalando-kubectl', 'login', config.get('kubernetes_api_server')])
+    subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
     while True:
         cmd = ['zalando-kubectl', 'get', 'pods', '--namespace={}'.format(namespace),
                '-l', 'application={},version={},release={}'.format(application, version, release), '-o', 'json']
@@ -133,6 +138,38 @@ def wait_for_deployment(config, application, version, release):
                 all_ready = False
         if all_ready:
             break
+
+
+@cli.command('switch-deployment')
+@click.argument('application')
+@click.argument('version')
+@click.argument('release')
+@click.argument('ratio')
+@click.pass_obj
+@click.option('--execute', is_flag=True)
+def switch_deployment(config, application, version, release, ratio, execute):
+    namespace = config.get('kubernetes_namespace')
+    # TODO: api server needs to come from Cluster Registry
+    subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
+
+    replicas, total = ratio.split('/')
+    replicas = int(replicas)
+    total = int(total)
+
+    deployment_name = '{}-{}-{}'.format(application, version, release)
+
+    token = zign.api.get_token('uid', ['uid'])
+    headers = {'Authorization': 'Bearer {}'.format(token), 'Content-Type': 'application/json'}
+    api_url = config.get('deploy_api')
+    cluster_id = config.get('kubernetes_cluster')
+    namespace = config.get('kubernetes_namespace')
+    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
+    response = requests.patch(url, headers=headers, data=json.dumps(get_scaling_operation(replicas, deployment_name)), timeout=5)
+    response.raise_for_status()
+    change_request_id = response.json()['id']
+
+    if execute:
+        approve_and_execute(api_url, change_request_id)
 
 
 def main():
