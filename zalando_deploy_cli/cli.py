@@ -1,14 +1,14 @@
 import json
+import subprocess
+import time
 
 import click
 import pystache
 import requests
-import subprocess
 import stups_cli.config
 import yaml
 import zign.api
-
-from clickclick import AliasedGroup
+from clickclick import AliasedGroup, info
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
@@ -129,24 +129,41 @@ def create_deployment(config, template, application, version, release, parameter
 @click.argument('application')
 @click.argument('version')
 @click.argument('release')
+@click.option('-t', '--timeout',
+              type=click.IntRange(0, 7200, clamp=True),
+              metavar='SECS',
+              default=300,
+              help='Maximum wait time (default: 300s)')
+@click.option('-i', '--interval', default=10,
+              type=click.IntRange(1, 600, clamp=True),
+              help='Time between checks (default: 10s)')
 @click.pass_obj
-def wait_for_deployment(config, application, version, release):
+def wait_for_deployment(config, application, version, release, timeout, interval):
     '''Wait for all pods'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
     subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
-    while True:
-        cmd = ['zalando-kubectl', 'get', 'pods', '--namespace={}'.format(namespace),
+    cutoff = time.time() + timeout
+    while time.time() < cutoff:
+        cmd = ['zkubectl', 'get', 'pods', '--namespace={}'.format(namespace),
                '-l', 'application={},version={},release={}'.format(application, version, release), '-o', 'json']
         out = subprocess.check_output(cmd)
         data = json.loads(out.decode('utf-8'))
         all_ready = True
+        pods = data['items']
         # TODO: check container states too
-        for pod in data['items']:
+        for pod in pods:
             if pod['status'].get('phase') != 'Running':
                 all_ready = False
-        if all_ready:
-            break
+            for cont in pod['status'].get('containerStatuses', []):
+                if not cont.get('ready'):
+                    all_ready = False
+        if pods and all_ready:
+            return
+        info('Waiting up to {:.0f} more secs '
+             'for deployment {}-{}-{}..'.format(cutoff - time.time(), application, version, release))
+        time.sleep(interval)
+    raise click.Abort()
 
 
 @cli.command('switch-deployment')
