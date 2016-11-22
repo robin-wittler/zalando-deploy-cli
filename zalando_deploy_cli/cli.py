@@ -3,6 +3,7 @@ import json
 import click
 import pystache
 import requests
+import subprocess
 import stups_cli.config
 import yaml
 import zign.api
@@ -43,13 +44,17 @@ def cli(ctx):
 
 @cli.command()
 @click.option('--deploy-api')
+@click.option('--cluster-registry')
 @click.option('--aws-account')
 @click.option('--aws-region')
+@click.option('--kubernetes-api-server')
 @click.option('--kubernetes-cluster')
 @click.option('--kubernetes-namespace')
 @click.pass_obj
 def configure(config, **kwargs):
-    config.update(**kwargs)
+    for key, val in kwargs.items():
+        if val is not None:
+            config[key] = val
     stups_cli.config.store_config(config, 'zalando-deploy-cli')
 
 
@@ -105,6 +110,29 @@ def create_deployment(config, template, application, version, release, parameter
 
     if execute:
         approve_and_execute(api_url, change_request_id)
+
+
+@cli.command('wait-deployment')
+@click.argument('application')
+@click.argument('version')
+@click.argument('release')
+@click.pass_obj
+def wait_deployment(config, application, version, release):
+    namespace = config.get('kubernetes_namespace')
+    # TODO: api server needs to come from Cluster Registry
+    subprocess.check_output(['zalando-kubectl', 'login', config.get('kubernetes_api_server')])
+    while True:
+        cmd = ['zalando-kubectl', 'get', 'pods', '--namespace={}'.format(namespace),
+               '-l', 'application={},version={},release={}'.format(application, version, release), '-o', 'json']
+        out = subprocess.check_output(cmd)
+        data = json.loads(out.decode('utf-8'))
+        all_ready = True
+        # TODO: check container states too
+        for pod in data['items']:
+            if pod['status'].get('phase') != 'Running':
+                all_ready = False
+        if all_ready:
+            break
 
 
 def main():
