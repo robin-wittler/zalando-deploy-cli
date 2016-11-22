@@ -8,6 +8,10 @@ import stups_cli.config
 import yaml
 import zign.api
 
+from clickclick import AliasedGroup
+
+CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+
 
 def approve_and_execute(api_url, change_request_id):
     token = zign.api.get_token('uid', ['uid'])
@@ -29,7 +33,7 @@ def parse_parameters(parameter):
     return context
 
 
-def render_template(template, context):
+def _render_template(template, context):
     contents = template.read()
     rendered_contents = pystache.render(contents, context)
     data = yaml.safe_load(rendered_contents)
@@ -41,7 +45,7 @@ def get_scaling_operation(replicas, deployment_name):
             'operations': [{'op': 'replace', 'path': '/spec/replicas', 'value': replicas}]}]}
 
 
-@click.group()
+@click.group(cls=AliasedGroup, context_settings=CONTEXT_SETTINGS)
 @click.pass_context
 def cli(ctx):
     ctx.obj = stups_cli.config.load_config('zalando-deploy-cli')
@@ -69,6 +73,7 @@ def configure(config, **kwargs):
 @click.pass_obj
 @click.option('--execute', is_flag=True)
 def apply(config, template, parameter, execute):
+    '''Apply CloudFormation or Kubernetes resource'''
     data = render_template(template, parse_parameters(parameter))
 
     token = zign.api.get_token('uid', ['uid'])
@@ -97,6 +102,7 @@ def apply(config, template, parameter, execute):
 @click.pass_obj
 @click.option('--execute', is_flag=True)
 def create_deployment(config, template, application, version, release, parameter, execute):
+    '''Create a new Kubernetes deployment'''
     context = parse_parameters(parameter)
     context['application'] = application
     context['version'] = version
@@ -123,6 +129,7 @@ def create_deployment(config, template, application, version, release, parameter
 @click.argument('release')
 @click.pass_obj
 def wait_for_deployment(config, application, version, release):
+    '''Wait for all pods'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
     subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
@@ -148,6 +155,7 @@ def wait_for_deployment(config, application, version, release):
 @click.pass_obj
 @click.option('--execute', is_flag=True)
 def switch_deployment(config, application, version, release, ratio, execute):
+    '''Switch to new release'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
     subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
@@ -170,6 +178,16 @@ def switch_deployment(config, application, version, release, ratio, execute):
 
     if execute:
         approve_and_execute(api_url, change_request_id)
+
+
+@cli.command('render-template')
+@click.argument('template', type=click.File('r'))
+@click.argument('parameter', nargs=-1)
+@click.pass_obj
+def render_template(config, template, parameter):
+    '''Interpolate YAML Mustache template'''
+    data = _render_template(template, parse_parameters(parameter))
+    print(yaml.safe_dump(data))
 
 
 def main():
