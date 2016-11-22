@@ -37,7 +37,7 @@ def render_template(template, context):
 
 
 def get_scaling_operation(replicas, deployment_name):
-    return {'resource_update': [{'kind': 'deployments', 'name': deployment_name,
+    return {'resources_update': [{'kind': 'deployments', 'name': deployment_name,
             'operations': [{'op': 'replace', 'path': '/spec/replicas', 'value': replicas}]}]}
 
 
@@ -115,6 +115,8 @@ def create_deployment(config, template, application, version, release, parameter
 
     if execute:
         approve_and_execute(api_url, change_request_id)
+    else:
+        print(change_request_id)
 
 
 @cli.command('wait-for-deployment')
@@ -164,7 +166,8 @@ def switch_deployment(config, application, version, release, ratio, execute):
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
     url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = requests.patch(url, headers=headers, data=json.dumps(get_scaling_operation(replicas, deployment_name)), timeout=5)
+    response = requests.patch(url, headers=headers, data=json.dumps(
+        get_scaling_operation(replicas, deployment_name)), timeout=5)
     response.raise_for_status()
     change_request_id = response.json()['id']
 
