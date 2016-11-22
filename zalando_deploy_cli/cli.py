@@ -112,12 +112,12 @@ def create_deployment(config, template, application, version, release, parameter
         approve_and_execute(api_url, change_request_id)
 
 
-@cli.command('wait-deployment')
+@cli.command('wait-for-deployment')
 @click.argument('application')
 @click.argument('version')
 @click.argument('release')
 @click.pass_obj
-def wait_deployment(config, application, version, release):
+def wait_for_deployment(config, application, version, release):
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
     subprocess.check_output(['zalando-kubectl', 'login', config.get('kubernetes_api_server')])
