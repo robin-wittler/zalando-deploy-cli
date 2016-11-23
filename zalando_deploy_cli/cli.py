@@ -240,9 +240,9 @@ def switch_deployment(config, application, version, release, ratio, execute):
             replicas = target_replicas
         else:
             # maybe spread across all other deployments?
-            replicas = remaining_replicas
+            replicas = max(remaining_replicas, 0)
 
-        remaining_replicas -= replicas
+        remaining_replicas = max(remaining_replicas - replicas, 0)
 
         info('Scaling deployment {} to {} replicas..'.format(deployment_name, replicas))
         api_url = config.get('deploy_api')
