@@ -314,6 +314,21 @@ def approve_change_request(config, change_request_id):
     approve(api_url, change_request_id)
 
 
+@cli.command('list-approvals')
+@click.argument('change_request_id')
+@click.pass_obj
+def list_approvals(config, change_request_id):
+    api_url = config.get('deploy_api')
+    url = '{}/change-requests/{}/approvals'.format(api_url, change_request_id)
+    response = request(requests.get, url)
+    response.raise_for_status()
+    items = response.json()['items']
+    rows = []
+    for row in items:
+        rows.append(row)
+    print_table('user created_at'.split(), rows)
+
+
 @cli.command('execute-change-request')
 @click.argument('change_request_id')
 @click.pass_obj
