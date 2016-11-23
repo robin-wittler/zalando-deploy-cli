@@ -19,14 +19,14 @@ Steps required by CI/CD Pipeline
 
 * Apply stateful resources
 
- * Cloud Formation templates
- * Kubernetes manifests
- * Should be possible for a whole directory
+  * Cloud Formation templates
+  * Kubernetes manifests
+  * Should be possible for a whole directory
  
 * Create Kubernetes deployment
 * Switch “traffic” / scale deployments pod by pod
 
- * Needs to check pod “readyness”
+  * Needs to check pod “readyness”
  
 * Delete old deployments
 * Scale deployment (manually triggered)
