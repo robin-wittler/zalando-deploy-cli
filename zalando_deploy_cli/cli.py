@@ -8,7 +8,7 @@ import requests
 import stups_cli.config
 import yaml
 import zign.api
-from clickclick import AliasedGroup, info, print_table
+from clickclick import AliasedGroup, error, info, print_table
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
@@ -232,6 +232,37 @@ def switch_deployment(config, application, version, release, ratio, execute):
             print(change_request_id)
 
 
+@cli.command()
+@click.argument('application')
+@click.argument('version')
+@click.argument('release')
+@click.argument('replicas', type=int)
+@click.pass_obj
+@click.option('--execute', is_flag=True)
+def scale(config, application, version, release, replicas, execute):
+    '''Switch to new release'''
+    namespace = config.get('kubernetes_namespace')
+    # TODO: api server needs to come from Cluster Registry
+    subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
+
+    deployment_name = '{}-{}-{}'.format(application, version, release)
+
+    info('Scaling deployment {} to {} replicas..'.format(deployment_name, replicas))
+    api_url = config.get('deploy_api')
+    cluster_id = config.get('kubernetes_cluster')
+    namespace = config.get('kubernetes_namespace')
+    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
+    response = request(requests.patch, url, data=json.dumps(
+        get_scaling_operation(replicas, deployment_name)))
+    response.raise_for_status()
+    change_request_id = response.json()['id']
+
+    if execute:
+        approve_and_execute(api_url, change_request_id)
+    else:
+        print(change_request_id)
+
+
 @cli.command('delete-old-deployments')
 @click.argument('application')
 @click.argument('version')
@@ -250,24 +281,35 @@ def delete_old_deployments(config, application, version, release, execute):
     data = json.loads(out.decode('utf-8'))
     deployments = data['items']
     target_deployment_name = '{}-{}-{}'.format(application, version, release)
+    deployments_to_delete = []
+    deployment_found = False
 
     for deployment in sorted(deployments, key=lambda d: d['metadata']['name'], reverse=True):
         deployment_name = deployment['metadata']['name']
-        if deployment_name != target_deployment_name:
-            info('Deleting deployment {}..'.format(deployment_name))
-            api_url = config.get('deploy_api')
-            cluster_id = config.get('kubernetes_cluster')
-            namespace = config.get('kubernetes_namespace')
-            url = '{}/kubernetes-clusters/{}/namespaces/{}/deployments/{}'.format(
-                api_url, cluster_id, namespace, deployment_name)
-            response = request(requests.delete, url)
-            response.raise_for_status()
-            change_request_id = response.json()['id']
+        if deployment_name == target_deployment_name:
+            deployment_found = True
+        else:
+            deployments_to_delete.append(deployment_name)
 
-            if execute:
-                approve_and_execute(api_url, change_request_id)
-            else:
-                print(change_request_id)
+    if not deployment_found:
+        error('Deployment {} was not found.'.format(target_deployment_name))
+        raise click.Abort()
+
+    for deployment in deployments_to_delete:
+        info('Deleting deployment {}..'.format(deployment_name))
+        api_url = config.get('deploy_api')
+        cluster_id = config.get('kubernetes_cluster')
+        namespace = config.get('kubernetes_namespace')
+        url = '{}/kubernetes-clusters/{}/namespaces/{}/deployments/{}'.format(
+            api_url, cluster_id, namespace, deployment_name)
+        response = request(requests.delete, url)
+        response.raise_for_status()
+        change_request_id = response.json()['id']
+
+        if execute:
+            approve_and_execute(api_url, change_request_id)
+        else:
+            print(change_request_id)
 
 
 @cli.command('render-template')
@@ -283,6 +325,7 @@ def render_template(config, template, parameter):
 @cli.command('list-change-requests')
 @click.pass_obj
 def list_change_requests(config):
+    '''List change requests'''
     api_url = config.get('deploy_api')
     url = '{}/change-requests'.format(api_url)
     response = request(requests.get, url)
@@ -295,31 +338,37 @@ def list_change_requests(config):
 
 
 @cli.command('get-change-request')
-@click.argument('change_request_id')
+@click.argument('change_request_id', nargs=-1)
 @click.pass_obj
 def get_change_request(config, change_request_id):
+    '''Get one or more change requests'''
     api_url = config.get('deploy_api')
-    url = '{}/change-requests/{}'.format(api_url, change_request_id)
-    response = request(requests.get, url)
-    response.raise_for_status()
-    data = response.json()
-    print(yaml.safe_dump(data, default_flow_style=False))
+    for id_ in change_request_id:
+        url = '{}/change-requests/{}'.format(api_url, id_)
+        response = request(requests.get, url)
+        response.raise_for_status()
+        data = response.json()
+        print(yaml.safe_dump(data, default_flow_style=False))
 
 
 @cli.command('approve-change-request')
-@click.argument('change_request_id')
+@click.argument('change_request_id', nargs=-1)
 @click.pass_obj
 def approve_change_request(config, change_request_id):
+    '''Approve one or more change requests'''
     api_url = config.get('deploy_api')
-    approve(api_url, change_request_id)
+    for id_ in change_request_id:
+        approve(api_url, id_)
 
 
 @cli.command('execute-change-request')
-@click.argument('change_request_id')
+@click.argument('change_request_id', nargs=-1)
 @click.pass_obj
 def execute_change_request(config, change_request_id):
+    '''Execute one or more change requests'''
     api_url = config.get('deploy_api')
-    execute(api_url, change_request_id)
+    for id_ in change_request_id:
+        execute(api_url, id_)
 
 
 def main():
