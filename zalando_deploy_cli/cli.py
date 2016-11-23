@@ -152,7 +152,7 @@ def create_deployment(config, template, application, version, release, parameter
               help='Time between checks (default: 10s)')
 @click.pass_obj
 def wait_for_deployment(config, application, version, release, timeout, interval):
-    '''Wait for all pods'''
+    '''Wait for all pods to become ready'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
     subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
@@ -232,15 +232,15 @@ def switch_deployment(config, application, version, release, ratio, execute):
             print(change_request_id)
 
 
-@cli.command()
+@cli.command('scale-deployment')
 @click.argument('application')
 @click.argument('version')
 @click.argument('release')
 @click.argument('replicas', type=int)
 @click.pass_obj
 @click.option('--execute', is_flag=True)
-def scale(config, application, version, release, replicas, execute):
-    '''Switch to new release'''
+def scale_deployment(config, application, version, release, replicas, execute):
+    '''Scale a single deployment'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
     subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
