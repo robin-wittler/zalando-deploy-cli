@@ -8,21 +8,36 @@ import requests
 import stups_cli.config
 import yaml
 import zign.api
-from clickclick import AliasedGroup, info
+from clickclick import AliasedGroup, info, print_table
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 
-def approve_and_execute(api_url, change_request_id):
+def request(method, url, data=None, headers=None, **kwargs):
     token = zign.api.get_token('uid', ['uid'])
-    headers = {'Authorization': 'Bearer {}'.format(token), 'Content-Type': 'application/json'}
+    if not headers:
+        headers = {}
+        if data:
+            headers['Content-Type'] = 'application/json'
+    headers['Authorization'] = 'Bearer {}'.format(token)
+    return method(url, data=data, headers=headers, timeout=5, **kwargs)
+
+
+def approve(api_url, change_request_id):
     url = '{}/change-requests/{}/approvals'.format(api_url, change_request_id)
-    response = requests.post(url, headers=headers, data=json.dumps({}), timeout=5)
+    response = request(requests.post, url, data=json.dumps({}))
     response.raise_for_status()
 
+
+def execute(api_url, change_request_id):
     url = '{}/change-requests/{}/execute'.format(api_url, change_request_id)
-    response = requests.post(url, headers=headers, timeout=5)
+    response = request(requests.post, url)
     response.raise_for_status()
+
+
+def approve_and_execute(api_url, change_request_id):
+    approve(api_url, change_request_id)
+    execute(api_url, change_request_id)
 
 
 def parse_parameters(parameter):
@@ -76,14 +91,12 @@ def apply(config, template, parameter, execute):
     '''Apply CloudFormation or Kubernetes resource'''
     data = _render_template(template, parse_parameters(parameter))
 
-    token = zign.api.get_token('uid', ['uid'])
-    headers = {'Authorization': 'Bearer {}'.format(token), 'Content-Type': 'application/json'}
     api_url = config.get('deploy_api')
     if 'kind' in data:
         cluster_id = config.get('kubernetes_cluster')
         namespace = config.get('kubernetes_namespace')
         url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-        response = requests.post(url, headers=headers, data=json.dumps(data), timeout=5)
+        response = request(requests.post, url, data=json.dumps(data))
         response.raise_for_status()
         change_request_id = response.json()['id']
     else:
@@ -111,13 +124,11 @@ def create_deployment(config, template, application, version, release, parameter
     context['release'] = release
     data = _render_template(template, context)
 
-    token = zign.api.get_token('uid', ['uid'])
-    headers = {'Authorization': 'Bearer {}'.format(token), 'Content-Type': 'application/json'}
     api_url = config.get('deploy_api')
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
     url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = requests.post(url, headers=headers, data=json.dumps(data), timeout=5)
+    response = request(requests.post, url, data=json.dumps(data))
     response.raise_for_status()
     change_request_id = response.json()['id']
 
@@ -206,14 +217,12 @@ def switch_deployment(config, application, version, release, ratio, execute):
         remaining_replicas -= replicas
 
         info('Scaling deployment {} to {} replicas..'.format(deployment_name, replicas))
-        token = zign.api.get_token('uid', ['uid'])
-        headers = {'Authorization': 'Bearer {}'.format(token), 'Content-Type': 'application/json'}
         api_url = config.get('deploy_api')
         cluster_id = config.get('kubernetes_cluster')
         namespace = config.get('kubernetes_namespace')
         url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-        response = requests.patch(url, headers=headers, data=json.dumps(
-            get_scaling_operation(replicas, deployment_name)), timeout=5)
+        response = request(requests.patch, url, data=json.dumps(
+            get_scaling_operation(replicas, deployment_name)))
         response.raise_for_status()
         change_request_id = response.json()['id']
 
@@ -246,14 +255,12 @@ def delete_old_deployments(config, application, version, release, execute):
         deployment_name = deployment['metadata']['name']
         if deployment_name != target_deployment_name:
             info('Deleting deployment {}..'.format(deployment_name))
-            token = zign.api.get_token('uid', ['uid'])
-            headers = {'Authorization': 'Bearer {}'.format(token)}
             api_url = config.get('deploy_api')
             cluster_id = config.get('kubernetes_cluster')
             namespace = config.get('kubernetes_namespace')
             url = '{}/kubernetes-clusters/{}/namespaces/{}/deployments/{}'.format(
                 api_url, cluster_id, namespace, deployment_name)
-            response = requests.delete(url, headers=headers, timeout=5)
+            response = request(requests.delete, url)
             response.raise_for_status()
             change_request_id = response.json()['id']
 
@@ -271,6 +278,48 @@ def render_template(config, template, parameter):
     '''Interpolate YAML Mustache template'''
     data = _render_template(template, parse_parameters(parameter))
     print(yaml.safe_dump(data))
+
+
+@cli.command('list-change-requests')
+@click.pass_obj
+def list_change_requests(config):
+    api_url = config.get('deploy_api')
+    url = '{}/change-requests'.format(api_url)
+    response = request(requests.get, url)
+    response.raise_for_status()
+    items = response.json()['items']
+    rows = []
+    for row in items:
+        rows.append(row)
+    print_table('id platform kind user executed'.split(), rows)
+
+
+@cli.command('get-change-request')
+@click.argument('change_request_id')
+@click.pass_obj
+def get_change_request(config, change_request_id):
+    api_url = config.get('deploy_api')
+    url = '{}/change-requests/{}'.format(api_url, change_request_id)
+    response = request(requests.get, url)
+    response.raise_for_status()
+    data = response.json()
+    print(yaml.safe_dump(data, default_flow_style=False))
+
+
+@cli.command('approve-change-request')
+@click.argument('change_request_id')
+@click.pass_obj
+def approve_change_request(config, change_request_id):
+    api_url = config.get('deploy_api')
+    approve(api_url, change_request_id)
+
+
+@cli.command('execute-change-request')
+@click.argument('change_request_id')
+@click.pass_obj
+def execute_change_request(config, change_request_id):
+    api_url = config.get('deploy_api')
+    execute(api_url, change_request_id)
 
 
 def main():
