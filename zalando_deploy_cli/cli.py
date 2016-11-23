@@ -14,19 +14,17 @@ from clickclick import AliasedGroup, error, info, print_table
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 
-def request(method, url, data=None, headers=None, **kwargs):
+def request(method, url, headers=None, **kwargs):
     token = zign.api.get_token('uid', ['uid'])
     if not headers:
         headers = {}
-        if data:
-            headers['Content-Type'] = 'application/json'
     headers['Authorization'] = 'Bearer {}'.format(token)
-    return method(url, data=data, headers=headers, timeout=5, **kwargs)
+    return method(url, headers=headers, timeout=5, **kwargs)
 
 
 def approve(api_url, change_request_id):
     url = '{}/change-requests/{}/approvals'.format(api_url, change_request_id)
-    response = request(requests.post, url, data=json.dumps({}))
+    response = request(requests.post, url, json={})
     response.raise_for_status()
 
 
@@ -113,10 +111,10 @@ def apply(config, template_or_directory, parameter, execute):
             cluster_id = config.get('kubernetes_cluster')
             namespace = config.get('kubernetes_namespace')
             url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-            response = request(requests.post, url, data=json.dumps(data))
+            response = request(requests.post, url, json=data)
             response.raise_for_status()
             change_request_id = response.json()['id']
-        else:
+        elif 'Resources' in data:
             info('Applying Cloud Formation template {}..'.format(path))
             aws_account = config.get('aws_account')
             aws_region = config.get('aws_region')
@@ -126,9 +124,12 @@ def apply(config, template_or_directory, parameter, execute):
                 raise click.Abort()
             url = '{}/aws-accounts/{}/regions/{}/cloudformation-stacks/{}'.format(
                 api_url, aws_account, aws_region, stack_name)
-            response = request(requests.put, url, data=json.dumps(data))
+            response = request(requests.put, url, json=data)
             response.raise_for_status()
             change_request_id = response.json()['id']
+        else:
+            error('Neither a Kubernetes manifest nor a Cloud Formation template: {}'.format(path))
+            raise click.Abort()
 
         if execute:
             approve_and_execute(api_url, change_request_id)
@@ -156,7 +157,7 @@ def create_deployment(config, template, application, version, release, parameter
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
     url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = request(requests.post, url, data=json.dumps(data))
+    response = request(requests.post, url, json=data)
     response.raise_for_status()
     change_request_id = response.json()['id']
 
@@ -249,8 +250,7 @@ def switch_deployment(config, application, version, release, ratio, execute):
         cluster_id = config.get('kubernetes_cluster')
         namespace = config.get('kubernetes_namespace')
         url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-        response = request(requests.patch, url, data=json.dumps(
-            get_scaling_operation(replicas, deployment_name)))
+        response = request(requests.patch, url, json=get_scaling_operation(replicas, deployment_name))
         response.raise_for_status()
         change_request_id = response.json()['id']
 
@@ -280,8 +280,7 @@ def scale_deployment(config, application, version, release, replicas, execute):
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
     url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = request(requests.patch, url, data=json.dumps(
-        get_scaling_operation(replicas, deployment_name)))
+    response = request(requests.patch, url, json=get_scaling_operation(replicas, deployment_name))
     response.raise_for_status()
     change_request_id = response.json()['id']
 
