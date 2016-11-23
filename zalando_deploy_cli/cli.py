@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import time
 
@@ -13,19 +14,17 @@ from clickclick import AliasedGroup, error, info, print_table
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 
-def request(method, url, data=None, headers=None, **kwargs):
+def request(method, url, headers=None, **kwargs):
     token = zign.api.get_token('uid', ['uid'])
     if not headers:
         headers = {}
-        if data:
-            headers['Content-Type'] = 'application/json'
     headers['Authorization'] = 'Bearer {}'.format(token)
-    return method(url, data=data, headers=headers, timeout=5, **kwargs)
+    return method(url, headers=headers, timeout=5, **kwargs)
 
 
 def approve(api_url, change_request_id):
     url = '{}/change-requests/{}/approvals'.format(api_url, change_request_id)
-    response = request(requests.post, url, data=json.dumps({}))
+    response = request(requests.post, url, json={})
     response.raise_for_status()
 
 
@@ -83,29 +82,59 @@ def configure(config, **kwargs):
 
 
 @cli.command()
-@click.argument('template', type=click.File('r'))
+@click.argument('template_or_directory')
 @click.argument('parameter', nargs=-1)
 @click.pass_obj
 @click.option('--execute', is_flag=True)
-def apply(config, template, parameter, execute):
+def apply(config, template_or_directory, parameter, execute):
     '''Apply CloudFormation or Kubernetes resource'''
-    data = _render_template(template, parse_parameters(parameter))
 
-    api_url = config.get('deploy_api')
-    if 'kind' in data:
-        cluster_id = config.get('kubernetes_cluster')
-        namespace = config.get('kubernetes_namespace')
-        url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-        response = request(requests.post, url, data=json.dumps(data))
-        response.raise_for_status()
-        change_request_id = response.json()['id']
+    template_paths = []
+    if os.path.isdir(template_or_directory):
+        for entry in os.listdir(template_or_directory):
+            if entry.endswith('.yaml') and not entry.startswith('.'):
+                template_paths.append(os.path.join(template_or_directory, entry))
     else:
-        pass
+        template_paths.append(template_or_directory)
 
-    if execute:
-        approve_and_execute(api_url, change_request_id)
-    else:
-        print(change_request_id)
+    for path in template_paths:
+        with open(path, 'r') as fd:
+            data = _render_template(fd, parse_parameters(parameter))
+
+        if not isinstance(data, dict):
+            error('Invalid YAML contents in {}'.format(path))
+            raise click.Abort()
+
+        api_url = config.get('deploy_api')
+        if 'kind' in data:
+            info('Applying Kubernetes manifest {}..'.format(path))
+            cluster_id = config.get('kubernetes_cluster')
+            namespace = config.get('kubernetes_namespace')
+            url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
+            response = request(requests.post, url, json=data)
+            response.raise_for_status()
+            change_request_id = response.json()['id']
+        elif 'Resources' in data:
+            info('Applying Cloud Formation template {}..'.format(path))
+            aws_account = config.get('aws_account')
+            aws_region = config.get('aws_region')
+            stack_name = data.get('Metadata', {}).get('StackName')
+            if not stack_name:
+                error('Cloud Formation template requires Metadata/StackName property')
+                raise click.Abort()
+            url = '{}/aws-accounts/{}/regions/{}/cloudformation-stacks/{}'.format(
+                api_url, aws_account, aws_region, stack_name)
+            response = request(requests.put, url, json=data)
+            response.raise_for_status()
+            change_request_id = response.json()['id']
+        else:
+            error('Neither a Kubernetes manifest nor a Cloud Formation template: {}'.format(path))
+            raise click.Abort()
+
+        if execute:
+            approve_and_execute(api_url, change_request_id)
+        else:
+            print(change_request_id)
 
 
 @cli.command('create-deployment')
@@ -128,7 +157,7 @@ def create_deployment(config, template, application, version, release, parameter
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
     url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = request(requests.post, url, data=json.dumps(data))
+    response = request(requests.post, url, json=data)
     response.raise_for_status()
     change_request_id = response.json()['id']
 
@@ -212,17 +241,16 @@ def switch_deployment(config, application, version, release, ratio, execute):
             replicas = target_replicas
         else:
             # maybe spread across all other deployments?
-            replicas = remaining_replicas
+            replicas = max(remaining_replicas, 0)
 
-        remaining_replicas -= replicas
+        remaining_replicas = max(remaining_replicas - replicas, 0)
 
         info('Scaling deployment {} to {} replicas..'.format(deployment_name, replicas))
         api_url = config.get('deploy_api')
         cluster_id = config.get('kubernetes_cluster')
         namespace = config.get('kubernetes_namespace')
         url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-        response = request(requests.patch, url, data=json.dumps(
-            get_scaling_operation(replicas, deployment_name)))
+        response = request(requests.patch, url, json=get_scaling_operation(replicas, deployment_name))
         response.raise_for_status()
         change_request_id = response.json()['id']
 
@@ -252,8 +280,7 @@ def scale_deployment(config, application, version, release, replicas, execute):
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
     url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = request(requests.patch, url, data=json.dumps(
-        get_scaling_operation(replicas, deployment_name)))
+    response = request(requests.patch, url, json=get_scaling_operation(replicas, deployment_name))
     response.raise_for_status()
     change_request_id = response.json()['id']
 
