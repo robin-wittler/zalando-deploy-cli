@@ -5,9 +5,12 @@ Zalando Deploy CLI
 This CLI provides an opinionated, high-level wrapper for the "Autobahn" deployment API:
 
 * It only provides high-level commands
+
   * Only support what CI/CD pipelines need
   * Low-level access to Kubernetes provided by `zkubectl`_
+  
 * It uses Mustache_ for templating
+
   * Familiar to Zalando users: we already use it in Senza_
   * Language-agnostic: users could switch to other tools without changing their manifests
 
@@ -15,12 +18,16 @@ Steps required by CI/CD Pipeline
 ================================
 
 * Apply stateful resources
+
  * Cloud Formation templates
  * Kubernetes manifests
  * Should be possible for a whole directory
+ 
 * Create Kubernetes deployment
 * Switch “traffic” / scale deployments pod by pod
+
  * Needs to check pod “readyness”
+ 
 * Delete old deployments
 * Scale deployment (manually triggered)
 
