@@ -59,6 +59,10 @@ def get_scaling_operation(replicas, deployment_name):
             'operations': [{'op': 'replace', 'path': '/spec/replicas', 'value': replicas}]}]}
 
 
+def kubectl_login(api_server):
+    subprocess.check_call(['zkubectl', 'login', api_server])
+
+
 @click.group(cls=AliasedGroup, context_settings=CONTEXT_SETTINGS)
 @click.pass_context
 def cli(ctx):
@@ -184,7 +188,7 @@ def wait_for_deployment(config, application, version, release, timeout, interval
     '''Wait for all pods to become ready'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
-    subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
+    kubectl_login(config.get('kubernetes_api_server'))
     deployment_name = '{}-{}-{}'.format(application, version, release)
     cutoff = time.time() + timeout
     while time.time() < cutoff:
@@ -221,7 +225,7 @@ def switch_deployment(config, application, version, release, ratio, execute):
     '''Switch to new release'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
-    subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
+    kubectl_login(config.get('kubernetes_api_server'))
 
     target_replicas, total = ratio.split('/')
     target_replicas = int(target_replicas)
@@ -234,16 +238,15 @@ def switch_deployment(config, application, version, release, ratio, execute):
     deployments = data['items']
     target_deployment_name = '{}-{}-{}'.format(application, version, release)
 
-    remaining_replicas = total
+    remaining_replicas = total - target_replicas
     for deployment in sorted(deployments, key=lambda d: d['metadata']['name'], reverse=True):
         deployment_name = deployment['metadata']['name']
         if deployment_name == target_deployment_name:
             replicas = target_replicas
         else:
             # maybe spread across all other deployments?
-            replicas = max(remaining_replicas, 0)
-
-        remaining_replicas = max(remaining_replicas - replicas, 0)
+            replicas = remaining_replicas
+            remaining_replicas = 0
 
         info('Scaling deployment {} to {} replicas..'.format(deployment_name, replicas))
         api_url = config.get('deploy_api')
@@ -271,7 +274,7 @@ def scale_deployment(config, application, version, release, replicas, execute):
     '''Scale a single deployment'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
-    subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
+    kubectl_login(config.get('kubernetes_api_server'))
 
     deployment_name = '{}-{}-{}'.format(application, version, release)
 
@@ -300,7 +303,7 @@ def delete_old_deployments(config, application, version, release, execute):
     '''Delete old releases'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
-    subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
+    kubectl_login(config.get('kubernetes_api_server'))
 
     cmd = ['zkubectl', 'get', 'deployments', '--namespace={}'.format(namespace),
            '-l', 'application={}'.format(application), '-o', 'json']
@@ -322,7 +325,7 @@ def delete_old_deployments(config, application, version, release, execute):
         error('Deployment {} was not found.'.format(target_deployment_name))
         raise click.Abort()
 
-    for deployment in deployments_to_delete:
+    for deployment_name in deployments_to_delete:
         info('Deleting deployment {}..'.format(deployment_name))
         api_url = config.get('deploy_api')
         cluster_id = config.get('kubernetes_cluster')
