@@ -275,7 +275,7 @@ def scale_deployment(config, application, version, release, replicas, execute):
     '''Scale a single deployment'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
-    subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
+    kubectl_login(config.get('kubernetes_api_server'))
 
     deployment_name = '{}-{}-{}'.format(application, version, release)
 
@@ -304,7 +304,7 @@ def delete_old_deployments(config, application, version, release, execute):
     '''Delete old releases'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
-    subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
+    kubectl_login(config.get('kubernetes_api_server'))
 
     cmd = ['zkubectl', 'get', 'deployments', '--namespace={}'.format(namespace),
            '-l', 'application={}'.format(application), '-o', 'json']
