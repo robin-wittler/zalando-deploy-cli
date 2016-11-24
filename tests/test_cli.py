@@ -19,6 +19,7 @@ def test_switch_deployment(monkeypatch, mock_config):
         assert cmd == ['zkubectl', 'get', 'deployments', '--namespace=mynamespace', '-l', 'application=myapp', '-o', 'json']
         output = {
             'items': [
+                {'metadata': {'name': 'myapp-v3-r40'}},
                 {'metadata': {'name': 'myapp-v2-r41'}},
                 {'metadata': {'name': 'myapp-v2-r42'}},
             ]
@@ -34,7 +35,7 @@ def test_switch_deployment(monkeypatch, mock_config):
 
     runner = CliRunner()
     result = runner.invoke(cli, ['switch-deployment', 'myapp', 'v2', 'r42', '1/2'])
-    assert 'Scaling deployment myapp-v2-r42 to 1 replicas..\nmy-change-request-id\nScaling deployment myapp-v2-r41 to 1 replicas..\nmy-change-request-id' == result.output.strip()
+    assert 'Scaling deployment myapp-v3-r40 to 1 replicas..\nmy-change-request-id\nScaling deployment myapp-v2-r42 to 1 replicas..\nmy-change-request-id\nScaling deployment myapp-v2-r41 to 0 replicas..\nmy-change-request-id' == result.output.strip()
 
 
 def test_delete_old_deployments(monkeypatch, mock_config):
@@ -42,6 +43,7 @@ def test_delete_old_deployments(monkeypatch, mock_config):
         assert cmd == ['zkubectl', 'get', 'deployments', '--namespace=mynamespace', '-l', 'application=myapp', '-o', 'json']
         output = {
             'items': [
+                {'metadata': {'name': 'myapp-v2-r40'}},
                 {'metadata': {'name': 'myapp-v2-r41'}},
                 {'metadata': {'name': 'myapp-v2-r42'}},
             ]
@@ -57,4 +59,4 @@ def test_delete_old_deployments(monkeypatch, mock_config):
 
     runner = CliRunner()
     result = runner.invoke(cli, ['delete-old-deployments', 'myapp', 'v2', 'r42'])
-    assert 'Deleting deployment myapp-v2-r41..\nmy-change-request-id' == result.output.strip()
+    assert 'Deleting deployment myapp-v2-r41..\nmy-change-request-id\nDeleting deployment myapp-v2-r40..\nmy-change-request-id' == result.output.strip()

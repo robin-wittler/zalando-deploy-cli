@@ -238,16 +238,15 @@ def switch_deployment(config, application, version, release, ratio, execute):
     deployments = data['items']
     target_deployment_name = '{}-{}-{}'.format(application, version, release)
 
-    remaining_replicas = total
+    remaining_replicas = total - target_replicas
     for deployment in sorted(deployments, key=lambda d: d['metadata']['name'], reverse=True):
         deployment_name = deployment['metadata']['name']
         if deployment_name == target_deployment_name:
             replicas = target_replicas
         else:
             # maybe spread across all other deployments?
-            replicas = max(remaining_replicas, 0)
-
-        remaining_replicas = max(remaining_replicas - replicas, 0)
+            replicas = remaining_replicas
+            remaining_replicas = 0
 
         info('Scaling deployment {} to {} replicas..'.format(deployment_name, replicas))
         api_url = config.get('deploy_api')
@@ -326,7 +325,7 @@ def delete_old_deployments(config, application, version, release, execute):
         error('Deployment {} was not found.'.format(target_deployment_name))
         raise click.Abort()
 
-    for deployment in deployments_to_delete:
+    for deployment_name in deployments_to_delete:
         info('Deleting deployment {}..'.format(deployment_name))
         api_url = config.get('deploy_api')
         cluster_id = config.get('kubernetes_cluster')
