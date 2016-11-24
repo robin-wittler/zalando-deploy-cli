@@ -59,6 +59,10 @@ def get_scaling_operation(replicas, deployment_name):
             'operations': [{'op': 'replace', 'path': '/spec/replicas', 'value': replicas}]}]}
 
 
+def kubectl_login(api_server):
+    subprocess.check_call(['zkubectl', 'login', api_server])
+
+
 @click.group(cls=AliasedGroup, context_settings=CONTEXT_SETTINGS)
 @click.pass_context
 def cli(ctx):
@@ -184,7 +188,7 @@ def wait_for_deployment(config, application, version, release, timeout, interval
     '''Wait for all pods to become ready'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
-    subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
+    kubectl_login(config.get('kubernetes_api_server'))
     deployment_name = '{}-{}-{}'.format(application, version, release)
     cutoff = time.time() + timeout
     while time.time() < cutoff:
@@ -221,7 +225,7 @@ def switch_deployment(config, application, version, release, ratio, execute):
     '''Switch to new release'''
     namespace = config.get('kubernetes_namespace')
     # TODO: api server needs to come from Cluster Registry
-    subprocess.check_output(['zkubectl', 'login', config.get('kubernetes_api_server')])
+    kubectl_login(config.get('kubernetes_api_server'))
 
     target_replicas, total = ratio.split('/')
     target_replicas = int(target_replicas)
