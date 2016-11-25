@@ -54,9 +54,19 @@ def _render_template(template, context):
     return data
 
 
-def get_scaling_operation(replicas, deployment_name):
-    return {'resources_update': [{'kind': 'deployments', 'name': deployment_name,
-            'operations': [{'op': 'replace', 'path': '/spec/replicas', 'value': replicas}]}]}
+class ResourcesUpdate:
+    def __init__(self, updates=None):
+        self.resources_update = updates or []
+
+    def set_number_of_replicas(self, name: str, replicas: int, kind: str='deployments'):
+        self.resources_update.append({
+            'name': name,
+            'kind': kind,
+            'operations': [{'op': 'replace', 'path': '/spec/replicas', 'value': replicas}]
+        })
+
+    def to_dict(self):
+        return {'resources_update': self.resources_update}
 
 
 def kubectl_login(api_server):
@@ -246,6 +256,7 @@ def switch_deployment(config, application, version, release, ratio, execute):
         error("Deployment {} does not exist!".format(target_deployment_name))
         exit(1)
 
+    resources_update = ResourcesUpdate()
     remaining_replicas = total - target_replicas
     for deployment in sorted(deployments, key=lambda d: d['metadata']['name'], reverse=True):
         deployment_name = deployment['metadata']['name']
@@ -257,18 +268,20 @@ def switch_deployment(config, application, version, release, ratio, execute):
             remaining_replicas = 0
 
         info('Scaling deployment {} to {} replicas..'.format(deployment_name, replicas))
-        api_url = config.get('deploy_api')
-        cluster_id = config.get('kubernetes_cluster')
-        namespace = config.get('kubernetes_namespace')
-        url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-        response = request(requests.patch, url, json=get_scaling_operation(replicas, deployment_name))
-        response.raise_for_status()
-        change_request_id = response.json()['id']
+        resources_update.set_number_of_replicas(deployment_name, replicas)
 
-        if execute:
-            approve_and_execute(api_url, change_request_id)
-        else:
-            print(change_request_id)
+    api_url = config.get('deploy_api')
+    cluster_id = config.get('kubernetes_cluster')
+    namespace = config.get('kubernetes_namespace')
+    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
+    response = request(requests.patch, url, json=resources_update.to_dict())
+    response.raise_for_status()
+    change_request_id = response.json()['id']
+
+    if execute:
+        approve_and_execute(api_url, change_request_id)
+    else:
+        print(change_request_id)
 
 
 @cli.command('scale-deployment')
@@ -287,11 +300,14 @@ def scale_deployment(config, application, version, release, replicas, execute):
     deployment_name = '{}-{}-{}'.format(application, version, release)
 
     info('Scaling deployment {} to {} replicas..'.format(deployment_name, replicas))
+    resources_update = ResourcesUpdate()
+    resources_update.set_number_of_replicas(deployment_name, replicas)
+
     api_url = config.get('deploy_api')
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
     url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = request(requests.patch, url, json=get_scaling_operation(replicas, deployment_name))
+    response = request(requests.patch, url, json=resources_update.to_dict())
     response.raise_for_status()
     change_request_id = response.json()['id']
 
