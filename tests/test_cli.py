@@ -127,3 +127,14 @@ def test_delete_old_deployments(monkeypatch, mock_config):
             'my-change-request-id\n'
             'Deleting deployment myapp-v2-r40..\n'
             'my-change-request-id' == result.output.strip())
+
+
+def test_promote_deployment(monkeypatch, mock_config):
+    request = MagicMock()
+    request.return_value.json.return_value = {'id': 'my-change-request-id'}
+
+    monkeypatch.setattr('zalando_deploy_cli.cli.request', request)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['promote-deployment', 'myapp', 'v2', 'r42', 'production'])
+    assert 'Promoting deployment myapp-v2-r42 to production stage..\nmy-change-request-id' == result.output.strip()
