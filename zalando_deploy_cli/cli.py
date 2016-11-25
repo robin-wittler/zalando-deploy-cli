@@ -59,6 +59,11 @@ def get_scaling_operation(replicas, deployment_name):
             'operations': [{'op': 'replace', 'path': '/spec/replicas', 'value': replicas}]}]}
 
 
+def get_promote_operation(stage, deployment_name):
+    return {'resources_update': [{'kind': 'deployments', 'name': deployment_name,
+            'operations': [{'op': 'replace', 'path': '/spec/template/metadata/labels/stage', 'value': stage}]}]}
+
+
 def kubectl_login(api_server):
     subprocess.check_call(['zkubectl', 'login', api_server])
 
@@ -212,6 +217,33 @@ def wait_for_deployment(config, application, version, release, timeout, interval
              '{} ({}/{} pods ready)..'.format(cutoff - time.time(), deployment_name, pods_ready, len(pods)))
         time.sleep(interval)
     raise click.Abort()
+
+
+@cli.command('promote-deployment')
+@click.argument('application')
+@click.argument('version')
+@click.argument('release')
+@click.argument('stage')
+@click.option('--execute', is_flag=True)
+@click.pass_obj
+def promote_deployment(config, application, version, release, stage, execute):
+    '''Promote deployment to new stage'''
+    namespace = config.get('kubernetes_namespace')
+    deployment_name = '{}-{}-{}'.format(application, version, release)
+
+    info('Promoting deployment {} to {} stage..'.format(deployment_name, stage))
+    api_url = config.get('deploy_api')
+    cluster_id = config.get('kubernetes_cluster')
+    namespace = config.get('kubernetes_namespace')
+    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
+    response = request(requests.patch, url, json=get_promote_operation(stage, deployment_name))
+    response.raise_for_status()
+    change_request_id = response.json()['id']
+
+    if execute:
+        approve_and_execute(api_url, change_request_id)
+    else:
+        print(change_request_id)
 
 
 @cli.command('switch-deployment')
