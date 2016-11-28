@@ -65,6 +65,14 @@ class ResourcesUpdate:
             'operations': [{'op': 'replace', 'path': '/spec/replicas', 'value': replicas}]
         })
 
+    def set_label(self, name: str, label_key: str, label_value: str, kind: str='deployments'):
+        path = '/spec/template/metadata/labels/{}'.format(label_key)
+        self.resources_update.append({
+            'name': name,
+            'kind': kind,
+            'operations': [{'op': 'replace', 'path': path, 'value': label_value}]
+        })
+
     def to_dict(self):
         return {'resources_update': self.resources_update}
 
@@ -222,6 +230,36 @@ def wait_for_deployment(config, application, version, release, timeout, interval
              '{} ({}/{} pods ready)..'.format(cutoff - time.time(), deployment_name, pods_ready, len(pods)))
         time.sleep(interval)
     raise click.Abort()
+
+
+@cli.command('promote-deployment')
+@click.argument('application')
+@click.argument('version')
+@click.argument('release')
+@click.argument('stage')
+@click.option('--execute', is_flag=True)
+@click.pass_obj
+def promote_deployment(config, application, version, release, stage, execute):
+    '''Promote deployment to new stage'''
+    namespace = config.get('kubernetes_namespace')
+    deployment_name = '{}-{}-{}'.format(application, version, release)
+
+    info('Promoting deployment {} to {} stage..'.format(deployment_name, stage))
+    api_url = config.get('deploy_api')
+    cluster_id = config.get('kubernetes_cluster')
+    namespace = config.get('kubernetes_namespace')
+    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
+
+    resources_update = ResourcesUpdate()
+    resources_update.set_label(deployment_name, 'stage', stage)
+    response = request(requests.patch, url, json=resources_update.to_dict())
+    response.raise_for_status()
+    change_request_id = response.json()['id']
+
+    if execute:
+        approve_and_execute(api_url, change_request_id)
+    else:
+        print(change_request_id)
 
 
 @cli.command('switch-deployment')
