@@ -65,13 +65,16 @@ class ResourcesUpdate:
             'operations': [{'op': 'replace', 'path': '/spec/replicas', 'value': replicas}]
         })
 
+    def set_label(self, name: str, label_key: str, label_value: str, kind: str='deployments'):
+        path = '/spec/template/metadata/labels/{}'.format(label_key)
+        self.resources_update.append({
+            'name': name,
+            'kind': kind,
+            'operations': [{'op': 'replace', 'path': path, 'value': label_value}]
+        })
+
     def to_dict(self):
         return {'resources_update': self.resources_update}
-
-
-def get_promote_operation(stage, deployment_name):
-    return {'resources_update': [{'kind': 'deployments', 'name': deployment_name,
-            'operations': [{'op': 'replace', 'path': '/spec/template/metadata/labels/stage', 'value': stage}]}]}
 
 
 def kubectl_login(api_server):
@@ -246,7 +249,10 @@ def promote_deployment(config, application, version, release, stage, execute):
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
     url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = request(requests.patch, url, json=get_promote_operation(stage, deployment_name))
+
+    resources_update = ResourcesUpdate()
+    resources_update.set_label(deployment_name, 'stage', stage)
+    response = request(requests.patch, url, json=resources_update.to_dict())
     response.raise_for_status()
     change_request_id = response.json()['id']
 
