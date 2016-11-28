@@ -238,6 +238,14 @@ def switch_deployment(config, application, version, release, ratio, execute):
     deployments = data['items']
     target_deployment_name = '{}-{}-{}'.format(application, version, release)
 
+    target_deployment_exists = False
+    for deployment in deployments:
+        if deployment['metadata']['name'] == target_deployment_name:
+            target_deployment_exists = True
+    if not target_deployment_exists:
+        error("Deployment {} does not exist!".format(target_deployment_name))
+        exit(1)
+
     remaining_replicas = total - target_replicas
     for deployment in sorted(deployments, key=lambda d: d['metadata']['name'], reverse=True):
         deployment_name = deployment['metadata']['name']
