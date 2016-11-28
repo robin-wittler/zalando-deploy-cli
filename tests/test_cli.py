@@ -1,6 +1,7 @@
 import json
 import pytest
 import requests
+import zalando_deploy_cli.cli
 from unittest.mock import MagicMock, ANY
 
 from click.testing import CliRunner
@@ -138,3 +139,15 @@ def test_promote_deployment(monkeypatch, mock_config):
     runner = CliRunner()
     result = runner.invoke(cli, ['promote-deployment', 'myapp', 'v2', 'r42', 'production'])
     assert 'Promoting deployment myapp-v2-r42 to production stage..\nmy-change-request-id' == result.output.strip()
+
+
+def test_request_exit_on_error(capsys):
+    mock_get = MagicMock()
+    mock_get.return_value.status_code = 418
+    mock_get.return_value.text = 'Some Error'
+
+    with pytest.raises(SystemExit) as e:
+        zalando_deploy_cli.cli.request(mock_get, 'https://example.org')
+    out, err = capsys.readouterr()
+    assert 'Server returned HTTP error 418 for https://example.org:\nSome Error' == err.strip()
+
