@@ -141,7 +141,9 @@ def test_promote_deployment(monkeypatch, mock_config):
     assert 'Promoting deployment myapp-v2-r42 to production stage..\nmy-change-request-id' == result.output.strip()
 
 
-def test_request_exit_on_error(capsys):
+def test_request_exit_on_error(monkeypatch, capsys):
+    monkeypatch.setattr('zign.api.get_token', lambda a, b: 'mytok')
+
     mock_get = MagicMock()
     mock_get.return_value.status_code = 418
     mock_get.return_value.text = 'Some Error'
