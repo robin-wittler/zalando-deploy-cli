@@ -80,8 +80,13 @@ class ResourcesUpdate:
         return {'resources_update': self.resources_update}
 
 
-def kubectl_login(api_server):
-    subprocess.check_call(['zkubectl', 'login', api_server])
+def kubectl_login(config):
+    arg = config.get('kubernetes_api_server')
+    if not arg:
+        # this requires zkubectl to be configured appropriately
+        # with the Cluster Registry URL
+        arg = config.get('kubernetes_cluster')
+    subprocess.check_call(['zkubectl', 'login', arg])
 
 
 @click.group(cls=AliasedGroup, context_settings=CONTEXT_SETTINGS)
@@ -205,8 +210,7 @@ def create_deployment(config, template, application, version, release, parameter
 def wait_for_deployment(config, application, version, release, timeout, interval):
     '''Wait for all pods to become ready'''
     namespace = config.get('kubernetes_namespace')
-    # TODO: api server needs to come from Cluster Registry
-    kubectl_login(config.get('kubernetes_api_server'))
+    kubectl_login(config)
     deployment_name = '{}-{}-{}'.format(application, version, release)
     cutoff = time.time() + timeout
     while time.time() < cutoff:
@@ -271,8 +275,7 @@ def promote_deployment(config, application, version, release, stage, execute):
 def switch_deployment(config, application, version, release, ratio, execute):
     '''Switch to new release'''
     namespace = config.get('kubernetes_namespace')
-    # TODO: api server needs to come from Cluster Registry
-    kubectl_login(config.get('kubernetes_api_server'))
+    kubectl_login(config)
 
     target_replicas, total = ratio.split('/')
     target_replicas = int(target_replicas)
@@ -330,8 +333,7 @@ def switch_deployment(config, application, version, release, ratio, execute):
 def scale_deployment(config, application, version, release, replicas, execute):
     '''Scale a single deployment'''
     namespace = config.get('kubernetes_namespace')
-    # TODO: api server needs to come from Cluster Registry
-    kubectl_login(config.get('kubernetes_api_server'))
+    kubectl_login(config)
 
     deployment_name = '{}-{}-{}'.format(application, version, release)
 
@@ -361,8 +363,7 @@ def scale_deployment(config, application, version, release, replicas, execute):
 def delete_old_deployments(config, application, version, release, execute):
     '''Delete old releases'''
     namespace = config.get('kubernetes_namespace')
-    # TODO: api server needs to come from Cluster Registry
-    kubectl_login(config.get('kubernetes_api_server'))
+    kubectl_login(config)
 
     cmd = ['zkubectl', 'get', 'deployments', '--namespace={}'.format(namespace),
            '-l', 'application={}'.format(application), '-o', 'json']
