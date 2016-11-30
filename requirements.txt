@@ -2,4 +2,4 @@ clickclick
 requests
 stups-zign
 pystache
-zalando-kubectl>=0.7
+zalando-kubectl>=0.8
