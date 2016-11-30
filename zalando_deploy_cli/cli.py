@@ -97,7 +97,6 @@ def cli(ctx):
 
 @cli.command()
 @click.option('--deploy-api')
-@click.option('--cluster-registry')
 @click.option('--aws-account')
 @click.option('--aws-region')
 @click.option('--kubernetes-api-server')
