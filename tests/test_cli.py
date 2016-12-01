@@ -20,8 +20,8 @@ def mock_config(monkeypatch):
 
 def test_switch_deployment(monkeypatch, mock_config):
     def check_output(cmd):
-        assert cmd == ['zkubectl', 'get', 'deployments', '--namespace=mynamespace',
-                       '-l', 'application=myapp', '-o', 'json']
+        assert cmd == ['zkubectl', 'get', '--namespace=mynamespace', '-o', 'json', 'deployments',
+                       '-l', 'application=myapp']
         output = {
             'items': [
                 {'metadata': {'name': 'myapp-v3-r40'}},
@@ -48,8 +48,8 @@ def test_switch_deployment(monkeypatch, mock_config):
 
 def test_switch_deployment_call_once(monkeypatch, mock_config):
     def check_output(cmd):
-        assert cmd == ['zkubectl', 'get', 'deployments', '--namespace=mynamespace',
-                       '-l', 'application=myapp', '-o', 'json']
+        assert cmd == ['zkubectl', 'get', '--namespace=mynamespace', '-o', 'json', 'deployments',
+                       '-l', 'application=myapp']
         output = {
             'items': [
                 {'metadata': {'name': 'myapp-v3-r40'}},
@@ -78,8 +78,8 @@ def test_switch_deployment_call_once(monkeypatch, mock_config):
 
 def test_switch_deployment_target_does_not_exist(monkeypatch, mock_config):
     def check_output(cmd):
-        assert cmd == ['zkubectl', 'get', 'deployments', '--namespace=mynamespace',
-                       '-l', 'application=myapp', '-o', 'json']
+        assert cmd == ['zkubectl', 'get', '--namespace=mynamespace', '-o', 'json', 'deployments',
+                       '-l', 'application=myapp']
         output = {
             'items': [
                 {'metadata': {'name': 'myapp-v3-r40'}},
@@ -104,8 +104,8 @@ def test_switch_deployment_target_does_not_exist(monkeypatch, mock_config):
 
 def test_delete_old_deployments(monkeypatch, mock_config):
     def check_output(cmd):
-        assert cmd == ['zkubectl', 'get', 'deployments', '--namespace=mynamespace', '-l',
-                       'application=myapp', '-o', 'json']
+        assert cmd == ['zkubectl', 'get', '--namespace=mynamespace', '-o', 'json', 'deployments', '-l',
+                       'application=myapp']
         output = {
             'items': [
                 {'metadata': {'name': 'myapp-v2-r40'}},
@@ -153,3 +153,12 @@ def test_request_exit_on_error(monkeypatch, capsys):
     out, err = capsys.readouterr()
     assert 'Server returned HTTP error 418 for https://example.org:\nSome Error' == err.strip()
 
+
+def test_get_current_replicas(monkeypatch, mock_config):
+    kubectl_get = MagicMock()
+    kubectl_get.return_value = {'items': [{'status': {'replicas': 1}}, {'status': {'replicas': 2}}]}
+    monkeypatch.setattr('zalando_deploy_cli.cli.kubectl_get', kubectl_get)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['get-current-replicas', 'myapp'])
+    assert '3' == result.output.strip()
