@@ -1,6 +1,7 @@
 import json
 import pytest
 import requests
+import yaml
 import zalando_deploy_cli.cli
 from unittest.mock import MagicMock, ANY
 
@@ -16,6 +17,30 @@ def mock_config(monkeypatch):
         'kubernetes_namespace': 'mynamespace'
     }
     monkeypatch.setattr('stups_cli.config.load_config', MagicMock(return_value=config))
+
+
+def test_create_deployment_invalid_argument():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        with open('template.yaml', 'w') as fd:
+            yaml.dump({}, fd)
+
+        result = runner.invoke(cli, ['create-deployment', 'template.yaml', 'my-app2', 'v2-X', 'r42'])
+    assert 'Error: Invalid value for "version": does not match regular expression pattern "^[a-z0-9][a-z0-9.-]*$' in result.output
+
+
+def test_create_deployment_success(monkeypatch):
+    request = MagicMock()
+    request.return_value.json.return_value = {'id': 'my-cr-id'}
+    monkeypatch.setattr('zalando_deploy_cli.cli.request', request)
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        with open('template.yaml', 'w') as fd:
+            yaml.dump({}, fd)
+
+        result = runner.invoke(cli, ['create-deployment', 'template.yaml', 'my-app', 'v1', 'r1', 'replicas=3'])
+    assert 'my-cr-id' == result.output.strip()
 
 
 def test_switch_deployment(monkeypatch, mock_config):
