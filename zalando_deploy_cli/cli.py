@@ -368,6 +368,35 @@ def scale_deployment(config, application, version, release, replicas, execute):
         print(change_request_id)
 
 
+@cli.command('apply-autoscaling')
+@click.argument('template', type=click.File('r'))
+@click.argument('application')
+@click.argument('version')
+@click.argument('release')
+@click.argument('parameter', nargs=-1)
+@click.pass_obj
+@click.option('--execute', is_flag=True)
+def apply_autoscaling(config, template, application, version, release, parameter, execute):
+    '''Apply Horizontal Pod Autoscaling to current deployment'''
+    context = parse_parameters(parameter)
+    context['application'] = application
+    context['version'] = version
+    context['release'] = release
+    data = _render_template(template, context)
+
+    api_url = config.get('deploy_api')
+    cluster_id = config.get('kubernetes_cluster')
+    namespace = config.get('kubernetes_namespace')
+    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
+    response = request(requests.post, url, json=data)
+    change_request_id = response.json()['id']
+
+    if execute:
+        approve_and_execute(api_url, change_request_id)
+    else:
+        print(change_request_id)
+
+
 @cli.command('delete-old-deployments')
 @click.argument('application')
 @click.argument('version')
@@ -463,6 +492,7 @@ def approve_change_request(config, change_request_id):
 @click.argument('change_request_id')
 @click.pass_obj
 def list_approvals(config, change_request_id):
+    '''Show approvals for given change request'''
     api_url = config.get('deploy_api')
     url = '{}/change-requests/{}/approvals'.format(api_url, change_request_id)
     response = request(requests.get, url)
