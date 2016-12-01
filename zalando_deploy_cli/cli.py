@@ -47,19 +47,25 @@ def request(method, url, headers=None, exit_on_error=True, **kwargs):
     return response
 
 
-def approve(api_url, change_request_id):
+def approve(config, change_request_id):
+    api_url = config.get('deploy_api')
     url = '{}/change-requests/{}/approvals'.format(api_url, change_request_id)
-    request(requests.post, url, json={})
+    data = {}
+    user = config.get('user')
+    if user:
+        data['user'] = user
+    request(requests.post, url, json=data)
 
 
-def execute(api_url, change_request_id):
+def execute(config, change_request_id):
+    api_url = config.get('deploy_api')
     url = '{}/change-requests/{}/execute'.format(api_url, change_request_id)
     request(requests.post, url)
 
 
-def approve_and_execute(api_url, change_request_id):
-    approve(api_url, change_request_id)
-    execute(api_url, change_request_id)
+def approve_and_execute(config, change_request_id):
+    approve(config, change_request_id)
+    execute(config, change_request_id)
 
 
 def parse_parameters(parameter):
@@ -129,6 +135,7 @@ def cli(ctx):
 @click.option('--kubernetes-api-server')
 @click.option('--kubernetes-cluster')
 @click.option('--kubernetes-namespace')
+@click.option('--user', help='Username to use for approvals (optional)')
 @click.pass_obj
 def configure(config, **kwargs):
     for key, val in kwargs.items():
@@ -186,7 +193,7 @@ def apply(config, template_or_directory, parameter, execute):
             raise click.Abort()
 
         if execute:
-            approve_and_execute(api_url, change_request_id)
+            approve_and_execute(config, change_request_id)
         else:
             print(change_request_id)
 
@@ -215,7 +222,7 @@ def create_deployment(config, template, application, version, release, parameter
     change_request_id = response.json()['id']
 
     if execute:
-        approve_and_execute(api_url, change_request_id)
+        approve_and_execute(config, change_request_id)
     else:
         print(change_request_id)
 
@@ -284,7 +291,7 @@ def promote_deployment(config, application, version, release, stage, execute):
     change_request_id = response.json()['id']
 
     if execute:
-        approve_and_execute(api_url, change_request_id)
+        approve_and_execute(config, change_request_id)
     else:
         print(change_request_id)
 
@@ -339,7 +346,7 @@ def switch_deployment(config, application, version, release, ratio, execute):
     change_request_id = response.json()['id']
 
     if execute:
-        approve_and_execute(api_url, change_request_id)
+        approve_and_execute(config, change_request_id)
     else:
         print(change_request_id)
 
@@ -383,7 +390,7 @@ def scale_deployment(config, application, version, release, replicas, execute):
     change_request_id = response.json()['id']
 
     if execute:
-        approve_and_execute(api_url, change_request_id)
+        approve_and_execute(config, change_request_id)
     else:
         print(change_request_id)
 
@@ -412,7 +419,7 @@ def apply_autoscaling(config, template, application, version, release, parameter
     change_request_id = response.json()['id']
 
     if execute:
-        approve_and_execute(api_url, change_request_id)
+        approve_and_execute(config, change_request_id)
     else:
         print(change_request_id)
 
@@ -456,7 +463,7 @@ def delete_old_deployments(config, application, version, release, execute):
         change_request_id = response.json()['id']
 
         if execute:
-            approve_and_execute(api_url, change_request_id)
+            approve_and_execute(config, change_request_id)
         else:
             print(change_request_id)
 
@@ -503,9 +510,8 @@ def get_change_request(config, change_request_id):
 @click.pass_obj
 def approve_change_request(config, change_request_id):
     '''Approve one or more change requests'''
-    api_url = config.get('deploy_api')
     for id_ in change_request_id:
-        approve(api_url, id_)
+        approve(config, id_)
 
 
 @cli.command('list-approvals')
