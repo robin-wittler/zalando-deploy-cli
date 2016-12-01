@@ -2,6 +2,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 
 import click
@@ -537,6 +538,17 @@ def execute_change_request(config, change_request_id):
     api_url = config.get('deploy_api')
     for id_ in change_request_id:
         execute(api_url, id_)
+
+
+@cli.command('encrypt')
+@click.pass_obj
+def encrypt(config):
+    '''Encrypt plain text (read from stdin) for deployment configuration'''
+    plain_text = sys.stdin.read()
+    api_url = config.get('deploy_api')
+    url = '{}/secrets'.format(api_url)
+    response = request(requests.post, url, json={'plaintext': plain_text})
+    print(response.json()['data'])
 
 
 def main():
