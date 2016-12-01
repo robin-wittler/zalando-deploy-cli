@@ -89,6 +89,13 @@ def kubectl_login(config):
     subprocess.check_call(['zkubectl', 'login', arg])
 
 
+def kubectl_get(namespace, *args):
+    cmd = ['zkubectl', 'get', '--namespace={}'.format(namespace), '-o', 'json'] + list(args)
+    out = subprocess.check_output(cmd)
+    data = json.loads(out.decode('utf-8'))
+    return data
+
+
 @click.group(cls=AliasedGroup, context_settings=CONTEXT_SETTINGS)
 @click.pass_context
 def cli(ctx):
@@ -213,10 +220,8 @@ def wait_for_deployment(config, application, version, release, timeout, interval
     deployment_name = '{}-{}-{}'.format(application, version, release)
     cutoff = time.time() + timeout
     while time.time() < cutoff:
-        cmd = ['zkubectl', 'get', 'pods', '--namespace={}'.format(namespace),
-               '-l', 'application={},version={},release={}'.format(application, version, release), '-o', 'json']
-        out = subprocess.check_output(cmd)
-        data = json.loads(out.decode('utf-8'))
+        data = kubectl_get(namespace, 'pods', '-l',
+                           'application={},version={},release={}'.format(application, version, release))
         pods = data['items']
         pods_ready = 0
         for pod in pods:
@@ -280,10 +285,7 @@ def switch_deployment(config, application, version, release, ratio, execute):
     target_replicas = int(target_replicas)
     total = int(total)
 
-    cmd = ['zkubectl', 'get', 'deployments', '--namespace={}'.format(namespace),
-           '-l', 'application={}'.format(application), '-o', 'json']
-    out = subprocess.check_output(cmd)
-    data = json.loads(out.decode('utf-8'))
+    data = kubectl_get(namespace, 'deployments', '-l', 'application={}'.format(application))
     deployments = data['items']
     target_deployment_name = '{}-{}-{}'.format(application, version, release)
 
@@ -322,6 +324,19 @@ def switch_deployment(config, application, version, release, ratio, execute):
         print(change_request_id)
 
 
+@cli.command('get-current-replicas')
+@click.argument('application')
+@click.pass_obj
+def get_current_replicas(config, application):
+    '''Get current total number of replicas for given application'''
+    namespace = config.get('kubernetes_namespace')
+    data = kubectl_get(namespace, 'deployments', '-l', 'application={}'.format(application))
+    replicas = 0
+    for deployment in data['items']:
+        replicas += deployment['status']['replicas']
+    print(replicas)
+
+
 @cli.command('scale-deployment')
 @click.argument('application')
 @click.argument('version')
@@ -353,6 +368,35 @@ def scale_deployment(config, application, version, release, replicas, execute):
         print(change_request_id)
 
 
+@cli.command('apply-autoscaling')
+@click.argument('template', type=click.File('r'))
+@click.argument('application')
+@click.argument('version')
+@click.argument('release')
+@click.argument('parameter', nargs=-1)
+@click.pass_obj
+@click.option('--execute', is_flag=True)
+def apply_autoscaling(config, template, application, version, release, parameter, execute):
+    '''Apply Horizontal Pod Autoscaling to current deployment'''
+    context = parse_parameters(parameter)
+    context['application'] = application
+    context['version'] = version
+    context['release'] = release
+    data = _render_template(template, context)
+
+    api_url = config.get('deploy_api')
+    cluster_id = config.get('kubernetes_cluster')
+    namespace = config.get('kubernetes_namespace')
+    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
+    response = request(requests.post, url, json=data)
+    change_request_id = response.json()['id']
+
+    if execute:
+        approve_and_execute(api_url, change_request_id)
+    else:
+        print(change_request_id)
+
+
 @cli.command('delete-old-deployments')
 @click.argument('application')
 @click.argument('version')
@@ -364,10 +408,7 @@ def delete_old_deployments(config, application, version, release, execute):
     namespace = config.get('kubernetes_namespace')
     kubectl_login(config)
 
-    cmd = ['zkubectl', 'get', 'deployments', '--namespace={}'.format(namespace),
-           '-l', 'application={}'.format(application), '-o', 'json']
-    out = subprocess.check_output(cmd)
-    data = json.loads(out.decode('utf-8'))
+    data = kubectl_get(namespace, 'deployments', '-l', 'application={}'.format(application))
     deployments = data['items']
     target_deployment_name = '{}-{}-{}'.format(application, version, release)
     deployments_to_delete = []
@@ -451,6 +492,7 @@ def approve_change_request(config, change_request_id):
 @click.argument('change_request_id')
 @click.pass_obj
 def list_approvals(config, change_request_id):
+    '''Show approvals for given change request'''
     api_url = config.get('deploy_api')
     url = '{}/change-requests/{}/approvals'.format(api_url, change_request_id)
     response = request(requests.get, url)
