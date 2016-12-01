@@ -21,21 +21,17 @@ APPLICATION_PATTERN = re.compile('^[a-z][a-z0-9-]*$')
 VERSION_PATTERN = re.compile('^[a-z0-9][a-z0-9.-]*$')
 
 
-def validate_application(ctx, param, value):
-    if not APPLICATION_PATTERN.match(value):
-        raise click.BadParameter('Application must satisfy regular expression pattern "[a-z][a-z0-9-]*"')
-    return value
+def validate_pattern(pattern):
+    def validate(ctx, param, value):
+        if not pattern.match(value):
+            raise click.BadParameter('does not match regular expression pattern "{}"'.format(pattern.pattern))
+        return value
+    return validate
 
 
-def validate_version(ctx, param, value):
-    if not VERSION_PATTERN.match(value):
-        raise click.BadParameter('Version/release must satisfy regular expression pattern "[a-z0-9][a-z0-9.-]*"')
-    return value
-
-
-application_argument = click.argument('application', callback=validate_application)
-version_argument = click.argument('version', callback=validate_version)
-release_argument = click.argument('release', callback=validate_version)
+application_argument = click.argument('application', callback=validate_pattern(APPLICATION_PATTERN))
+version_argument = click.argument('version', callback=validate_pattern(VERSION_PATTERN))
+release_argument = click.argument('release', callback=validate_pattern(VERSION_PATTERN))
 
 
 def request(method, url, headers=None, exit_on_error=True, **kwargs):
