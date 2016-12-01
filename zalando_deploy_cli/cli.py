@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import time
 
@@ -12,6 +13,29 @@ import zign.api
 from clickclick import AliasedGroup, error, info, print_table
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+
+# NOTE: application-version-release will be used as Kubernetes resource name
+# Kubernetes resource names must conform to DNS_SUBDOMAIN
+# see https://github.com/kubernetes/kubernetes/blob/1dfd64f4378ad9dd974bbfbef8e90127dce6aafe/pkg/api/v1/types.go#L53
+APPLICATION_PATTERN = re.compile('^[a-z][a-z0-9-]*$')
+VERSION_PATTERN = re.compile('^[a-z0-9][a-z0-9.-]*$')
+
+
+def validate_application(ctx, param, value):
+    if not APPLICATION_PATTERN.match(value):
+        raise click.BadParameter('Application must satisfy regular expression pattern "[a-z][a-z0-9-]*"')
+    return value
+
+
+def validate_version(ctx, param, value):
+    if not VERSION_PATTERN.match(value):
+        raise click.BadParameter('Version/release must satisfy regular expression pattern "[a-z0-9][a-z0-9.-]*"')
+    return value
+
+
+application_argument = click.argument('application', callback=validate_application)
+version_argument = click.argument('version', callback=validate_version)
+release_argument = click.argument('release', callback=validate_version)
 
 
 def request(method, url, headers=None, exit_on_error=True, **kwargs):
@@ -173,9 +197,9 @@ def apply(config, template_or_directory, parameter, execute):
 
 @cli.command('create-deployment')
 @click.argument('template', type=click.File('r'))
-@click.argument('application')
-@click.argument('version')
-@click.argument('release')
+@application_argument
+@version_argument
+@release_argument
 @click.argument('parameter', nargs=-1)
 @click.pass_obj
 @click.option('--execute', is_flag=True)
@@ -201,9 +225,9 @@ def create_deployment(config, template, application, version, release, parameter
 
 
 @cli.command('wait-for-deployment')
-@click.argument('application')
-@click.argument('version')
-@click.argument('release')
+@application_argument
+@version_argument
+@release_argument
 @click.option('-t', '--timeout',
               type=click.IntRange(0, 7200, clamp=True),
               metavar='SECS',
@@ -241,9 +265,9 @@ def wait_for_deployment(config, application, version, release, timeout, interval
 
 
 @cli.command('promote-deployment')
-@click.argument('application')
-@click.argument('version')
-@click.argument('release')
+@application_argument
+@version_argument
+@release_argument
 @click.argument('stage')
 @click.option('--execute', is_flag=True)
 @click.pass_obj
@@ -270,9 +294,9 @@ def promote_deployment(config, application, version, release, stage, execute):
 
 
 @cli.command('switch-deployment')
-@click.argument('application')
-@click.argument('version')
-@click.argument('release')
+@application_argument
+@version_argument
+@release_argument
 @click.argument('ratio')
 @click.pass_obj
 @click.option('--execute', is_flag=True)
@@ -325,7 +349,7 @@ def switch_deployment(config, application, version, release, ratio, execute):
 
 
 @cli.command('get-current-replicas')
-@click.argument('application')
+@application_argument
 @click.pass_obj
 def get_current_replicas(config, application):
     '''Get current total number of replicas for given application'''
@@ -338,9 +362,9 @@ def get_current_replicas(config, application):
 
 
 @cli.command('scale-deployment')
-@click.argument('application')
-@click.argument('version')
-@click.argument('release')
+@application_argument
+@version_argument
+@release_argument
 @click.argument('replicas', type=int)
 @click.pass_obj
 @click.option('--execute', is_flag=True)
@@ -370,9 +394,9 @@ def scale_deployment(config, application, version, release, replicas, execute):
 
 @cli.command('apply-autoscaling')
 @click.argument('template', type=click.File('r'))
-@click.argument('application')
-@click.argument('version')
-@click.argument('release')
+@application_argument
+@version_argument
+@release_argument
 @click.argument('parameter', nargs=-1)
 @click.pass_obj
 @click.option('--execute', is_flag=True)
@@ -398,9 +422,9 @@ def apply_autoscaling(config, template, application, version, release, parameter
 
 
 @cli.command('delete-old-deployments')
-@click.argument('application')
-@click.argument('version')
-@click.argument('release')
+@application_argument
+@version_argument
+@release_argument
 @click.pass_obj
 @click.option('--execute', is_flag=True)
 def delete_old_deployments(config, application, version, release, execute):
