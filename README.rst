@@ -2,13 +2,33 @@
 Zalando Deploy CLI
 ==================
 
+.. image:: https://travis-ci.org/zalando-incubator/zalando-deploy-cli.svg?branch=master
+   :target: https://travis-ci.org/zalando-incubator/zalando-deploy-cli
+   :alt: Build Status
+
+.. image:: https://coveralls.io/repos/zalando-incubator/zalando-deploy-cli/badge.svg
+   :target: https://coveralls.io/r/zalando-incubator/zalando-deploy-cli
+   :alt: Code Coverage
+
+.. image:: https://img.shields.io/pypi/dw/zalando-deploy-cli.svg
+   :target: https://pypi.python.org/pypi/zalando-deploy-cli/
+   :alt: PyPI Downloads
+
+.. image:: https://img.shields.io/pypi/v/zalando-deploy-cli.svg
+   :target: https://pypi.python.org/pypi/zalando-deploy-cli/
+   :alt: Latest PyPI version
+
+.. image:: https://img.shields.io/pypi/l/zalando-deploy-cli.svg
+   :target: https://pypi.python.org/pypi/zalando-deploy-cli/
+   :alt: License
+
 This CLI provides an opinionated, high-level wrapper for the "Autobahn" deployment API:
 
 * It only provides high-level commands
 
   * Only support what CI/CD pipelines need
   * Low-level access to Kubernetes provided by `zkubectl`_
-  
+
 * It uses Mustache_ for templating
 
   * Familiar to Zalando users: we already use it in Senza_
@@ -22,12 +42,12 @@ Steps required by CI/CD Pipeline
   * Cloud Formation templates
   * Kubernetes manifests
   * Should be possible for a whole directory
- 
+
 * Create Kubernetes deployment
 * Switch “traffic” / scale deployments pod by pod
 
   * Needs to check pod “readyness”
- 
+
 * Delete old deployments
 * Scale deployment (manually triggered)
 

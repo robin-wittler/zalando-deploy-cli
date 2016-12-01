@@ -71,7 +71,7 @@ setup(
     author='Zalando SE',
     url='https://github.com/zalando-incubator/zalando-deploy-cli',
     keywords='',
-    license='',
+    license='MIT',
     install_requires=get_install_requirements('requirements.txt'),
     tests_require=['pytest-cov', 'pytest'],
     cmdclass={'test': PyTest},
