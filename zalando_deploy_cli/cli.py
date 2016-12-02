@@ -361,7 +361,7 @@ def get_current_replicas(config, application):
     data = kubectl_get(namespace, 'deployments', '-l', 'application={}'.format(application))
     replicas = 0
     for deployment in data['items']:
-        replicas += deployment['status']['replicas']
+        replicas += deployment.get('status', {}).get('replicas', 0)
     print(replicas)
 
 
