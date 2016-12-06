@@ -21,6 +21,8 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 APPLICATION_PATTERN = re.compile('^[a-z][a-z0-9-]*$')
 VERSION_PATTERN = re.compile('^[a-z0-9][a-z0-9.-]*$')
 
+DEFAULT_HTTP_TIMEOUT = 30  # seconds
+
 
 def validate_pattern(pattern):
     def validate(ctx, param, value):
@@ -40,7 +42,7 @@ def request(method, url, headers=None, exit_on_error=True, **kwargs):
     if not headers:
         headers = {}
     headers['Authorization'] = 'Bearer {}'.format(token)
-    response = method(url, headers=headers, timeout=5, **kwargs)
+    response = method(url, headers=headers, timeout=DEFAULT_HTTP_TIMEOUT, **kwargs)
     if exit_on_error:
         if not (200 <= response.status_code < 400):
             error('Server returned HTTP error {} for {}:\n{}'.format(response.status_code, url, response.text))
