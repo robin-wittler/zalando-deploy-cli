@@ -14,9 +14,12 @@ def mock_config(monkeypatch):
     config = {
         'kubernetes_api_server': 'https://example.org',
         'kubernetes_cluster': 'mycluster',
-        'kubernetes_namespace': 'mynamespace'
+        'kubernetes_namespace': 'mynamespace',
+        'deploy_api': 'https://deploy.example.org'
     }
-    monkeypatch.setattr('stups_cli.config.load_config', MagicMock(return_value=config))
+    load_config = MagicMock(return_value=config)
+    monkeypatch.setattr('stups_cli.config.load_config', load_config)
+    return load_config
 
 
 def test_create_deployment_invalid_argument():
@@ -173,7 +176,7 @@ def test_request_exit_on_error(monkeypatch, capsys):
     mock_get.return_value.status_code = 418
     mock_get.return_value.text = 'Some Error'
 
-    with pytest.raises(SystemExit) as e:
+    with pytest.raises(SystemExit):
         zalando_deploy_cli.cli.request(mock_get, 'https://example.org')
     out, err = capsys.readouterr()
     assert 'Server returned HTTP error 418 for https://example.org:\nSome Error' == err.strip()
@@ -187,3 +190,20 @@ def test_get_current_replicas(monkeypatch, mock_config):
     runner = CliRunner()
     result = runner.invoke(cli, ['get-current-replicas', 'myapp'])
     assert '3' == result.output.strip()
+
+
+def test_encrypt(monkeypatch, mock_config):
+    encrypt_call = MagicMock()
+    encrypt_call.return_value = encrypt_call
+    encrypt_call.json = MagicMock(return_value={
+        'data': 'barFooBAR='
+    })
+    monkeypatch.setattr('zalando_deploy_cli.cli.request', encrypt_call)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ['encrypt'], input='my_secret')
+    assert 'deployment-secret:barFooBAR=' == result.output.strip()
+
+    encrypt_call.assert_called_with(requests.post,
+                                    mock_config().get('deploy_api') + '/secrets',
+                                    json={'plaintext': 'my_secret'})
