@@ -550,7 +550,7 @@ def encrypt(config):
     api_url = config.get('deploy_api')
     url = '{}/secrets'.format(api_url)
     response = request(requests.post, url, json={'plaintext': plain_text})
-    print(response.json()['data'])
+    print("deployment-secret:{}".format(response.json()['data']))
 
 
 def main():

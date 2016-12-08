@@ -173,7 +173,7 @@ def test_request_exit_on_error(monkeypatch, capsys):
     mock_get.return_value.status_code = 418
     mock_get.return_value.text = 'Some Error'
 
-    with pytest.raises(SystemExit) as e:
+    with pytest.raises(SystemExit):
         zalando_deploy_cli.cli.request(mock_get, 'https://example.org')
     out, err = capsys.readouterr()
     assert 'Server returned HTTP error 418 for https://example.org:\nSome Error' == err.strip()
