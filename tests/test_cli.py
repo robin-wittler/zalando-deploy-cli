@@ -177,9 +177,22 @@ def test_request_exit_on_error(monkeypatch, capsys):
     mock_get.return_value.text = 'Some Error'
 
     with pytest.raises(SystemExit):
-        zalando_deploy_cli.cli.request(mock_get, 'https://example.org')
+        zalando_deploy_cli.cli.request({}, mock_get, 'https://example.org')
     out, err = capsys.readouterr()
     assert 'Server returned HTTP error 418 for https://example.org:\nSome Error' == err.strip()
+
+
+def test_request_headers(monkeypatch, capsys):
+    monkeypatch.setattr('zign.api.get_token', lambda a, b: 'mytok')
+
+    def mock_get(*args, **kwargs):
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = kwargs.get('headers')
+        return response
+
+    response = zalando_deploy_cli.cli.request({'user': 'jdoe'}, mock_get, 'https://example.org')
+    assert {'Authorization': 'Bearer mytok', 'X-On-Behalf-Of': 'jdoe'} == response.json()
 
 
 def test_get_current_replicas(monkeypatch, mock_config):
@@ -204,6 +217,6 @@ def test_encrypt(monkeypatch, mock_config):
     result = runner.invoke(cli, ['encrypt'], input='my_secret')
     assert 'deployment-secret:barFooBAR=' == result.output.strip()
 
-    encrypt_call.assert_called_with(requests.post,
+    encrypt_call.assert_called_with(mock_config(), requests.post,
                                     mock_config().get('deploy_api') + '/secrets',
                                     json={'plaintext': 'my_secret'})
