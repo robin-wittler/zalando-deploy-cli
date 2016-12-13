@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.parse
 
 import click
 import pystache
@@ -37,13 +38,15 @@ version_argument = click.argument('version', callback=validate_pattern(VERSION_P
 release_argument = click.argument('release', callback=validate_pattern(VERSION_PATTERN))
 
 
-def request(config, method, url, headers=None, exit_on_error=True, **kwargs):
+def request(config: dict, method, path: str, headers=None, exit_on_error=True, **kwargs):
     token = zign.api.get_token('uid', ['uid'])
     if not headers:
         headers = {}
     headers['Authorization'] = 'Bearer {}'.format(token)
     if config.get('user'):
         headers['X-On-Behalf-Of'] = config['user']
+    api_url = config.get('deploy_api')
+    url = urllib.parse.urljoin(api_url, path)
     response = method(url, headers=headers, timeout=DEFAULT_HTTP_TIMEOUT, **kwargs)
     if exit_on_error:
         if not (200 <= response.status_code < 400):
@@ -53,19 +56,14 @@ def request(config, method, url, headers=None, exit_on_error=True, **kwargs):
 
 
 def approve(config, change_request_id):
-    api_url = config.get('deploy_api')
-    url = '{}/change-requests/{}/approvals'.format(api_url, change_request_id)
+    path = '/change-requests/{}/approvals'.format(change_request_id)
     data = {}
-    user = config.get('user')
-    if user:
-        data['user'] = user
-    request(config, requests.post, url, json=data)
+    request(config, requests.post, path, json=data)
 
 
 def execute(config, change_request_id):
-    api_url = config.get('deploy_api')
-    url = '{}/change-requests/{}/execute'.format(api_url, change_request_id)
-    request(config, requests.post, url)
+    path = '/change-requests/{}/execute'.format(change_request_id)
+    request(config, requests.post, path)
 
 
 def approve_and_execute(config, change_request_id):
@@ -173,13 +171,12 @@ def apply(config, template_or_directory, parameter, execute):
             error('Invalid YAML contents in {}'.format(path))
             raise click.Abort()
 
-        api_url = config.get('deploy_api')
         if 'kind' in data:
             info('Applying Kubernetes manifest {}..'.format(path))
             cluster_id = config.get('kubernetes_cluster')
             namespace = config.get('kubernetes_namespace')
-            url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-            response = request(config, requests.post, url, json=data)
+            path = '/kubernetes-clusters/{}/namespaces/{}/resources'.format(cluster_id, namespace)
+            response = request(config, requests.post, path, json=data)
             change_request_id = response.json()['id']
         elif 'Resources' in data:
             info('Applying Cloud Formation template {}..'.format(path))
@@ -189,9 +186,9 @@ def apply(config, template_or_directory, parameter, execute):
             if not stack_name:
                 error('Cloud Formation template requires Metadata/StackName property')
                 raise click.Abort()
-            url = '{}/aws-accounts/{}/regions/{}/cloudformation-stacks/{}'.format(
-                api_url, aws_account, aws_region, stack_name)
-            response = request(config, requests.put, url, json=data)
+            path = '/aws-accounts/{}/regions/{}/cloudformation-stacks/{}'.format(
+                aws_account, aws_region, stack_name)
+            response = request(config, requests.put, path, json=data)
             change_request_id = response.json()['id']
         else:
             error('Neither a Kubernetes manifest nor a Cloud Formation template: {}'.format(path))
@@ -219,11 +216,10 @@ def create_deployment(config, template, application, version, release, parameter
     context['release'] = release
     data = _render_template(template, context)
 
-    api_url = config.get('deploy_api')
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
-    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = request(config, requests.post, url, json=data)
+    path = '/kubernetes-clusters/{}/namespaces/{}/resources'.format(cluster_id, namespace)
+    response = request(config, requests.post, path, json=data)
     change_request_id = response.json()['id']
 
     if execute:
@@ -285,14 +281,13 @@ def promote_deployment(config, application, version, release, stage, execute):
     deployment_name = '{}-{}-{}'.format(application, version, release)
 
     info('Promoting deployment {} to {} stage..'.format(deployment_name, stage))
-    api_url = config.get('deploy_api')
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
-    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
+    path = '/kubernetes-clusters/{}/namespaces/{}/resources'.format(cluster_id, namespace)
 
     resources_update = ResourcesUpdate()
     resources_update.set_label(deployment_name, 'stage', stage)
-    response = request(config, requests.patch, url, json=resources_update.to_dict())
+    response = request(config, requests.patch, path, json=resources_update.to_dict())
     change_request_id = response.json()['id']
 
     if execute:
@@ -343,11 +338,10 @@ def switch_deployment(config, application, version, release, ratio, execute):
         info('Scaling deployment {} to {} replicas..'.format(deployment_name, replicas))
         resources_update.set_number_of_replicas(deployment_name, replicas)
 
-    api_url = config.get('deploy_api')
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
-    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = request(config, requests.patch, url, json=resources_update.to_dict())
+    path = '/kubernetes-clusters/{}/namespaces/{}/resources'.format(cluster_id, namespace)
+    response = request(config, requests.patch, path, json=resources_update.to_dict())
     change_request_id = response.json()['id']
 
     if execute:
@@ -387,11 +381,10 @@ def scale_deployment(config, application, version, release, replicas, execute):
     resources_update = ResourcesUpdate()
     resources_update.set_number_of_replicas(deployment_name, replicas)
 
-    api_url = config.get('deploy_api')
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
-    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = request(config, requests.patch, url, json=resources_update.to_dict())
+    path = '/kubernetes-clusters/{}/namespaces/{}/resources'.format(cluster_id, namespace)
+    response = request(config, requests.patch, path, json=resources_update.to_dict())
     change_request_id = response.json()['id']
 
     if execute:
@@ -416,11 +409,10 @@ def apply_autoscaling(config, template, application, version, release, parameter
     context['release'] = release
     data = _render_template(template, context)
 
-    api_url = config.get('deploy_api')
     cluster_id = config.get('kubernetes_cluster')
     namespace = config.get('kubernetes_namespace')
-    url = '{}/kubernetes-clusters/{}/namespaces/{}/resources'.format(api_url, cluster_id, namespace)
-    response = request(config, requests.post, url, json=data)
+    path = '/kubernetes-clusters/{}/namespaces/{}/resources'.format(cluster_id, namespace)
+    response = request(config, requests.post, path, json=data)
     change_request_id = response.json()['id']
 
     if execute:
@@ -459,12 +451,11 @@ def delete_old_deployments(config, application, version, release, execute):
 
     for deployment_name in deployments_to_delete:
         info('Deleting deployment {}..'.format(deployment_name))
-        api_url = config.get('deploy_api')
         cluster_id = config.get('kubernetes_cluster')
         namespace = config.get('kubernetes_namespace')
-        url = '{}/kubernetes-clusters/{}/namespaces/{}/deployments/{}'.format(
-            api_url, cluster_id, namespace, deployment_name)
-        response = request(config, requests.delete, url)
+        path = '/kubernetes-clusters/{}/namespaces/{}/deployments/{}'.format(
+            cluster_id, namespace, deployment_name)
+        response = request(config, requests.delete, path)
         change_request_id = response.json()['id']
 
         if execute:
@@ -487,9 +478,7 @@ def render_template(config, template, parameter):
 @click.pass_obj
 def list_change_requests(config):
     '''List change requests'''
-    api_url = config.get('deploy_api')
-    url = '{}/change-requests'.format(api_url)
-    response = request(config, requests.get, url)
+    response = request(config, requests.get, '/change-requests')
     items = response.json()['items']
     rows = []
     for row in items:
@@ -502,10 +491,9 @@ def list_change_requests(config):
 @click.pass_obj
 def get_change_request(config, change_request_id):
     '''Get one or more change requests'''
-    api_url = config.get('deploy_api')
     for id_ in change_request_id:
-        url = '{}/change-requests/{}'.format(api_url, id_)
-        response = request(config, requests.get, url)
+        path = '/change-requests/{}'.format(id_)
+        response = request(config, requests.get, path)
         data = response.json()
         print(yaml.safe_dump(data, default_flow_style=False))
 
@@ -524,9 +512,8 @@ def approve_change_request(config, change_request_id):
 @click.pass_obj
 def list_approvals(config, change_request_id):
     '''Show approvals for given change request'''
-    api_url = config.get('deploy_api')
-    url = '{}/change-requests/{}/approvals'.format(api_url, change_request_id)
-    response = request(config, requests.get, url)
+    path = '/change-requests/{}/approvals'.format(change_request_id)
+    response = request(config, requests.get, path)
     items = response.json()['items']
     rows = []
     for row in items:
@@ -539,9 +526,8 @@ def list_approvals(config, change_request_id):
 @click.pass_obj
 def execute_change_request(config, change_request_id):
     '''Execute one or more change requests'''
-    api_url = config.get('deploy_api')
     for id_ in change_request_id:
-        execute(api_url, id_)
+        execute(config, id_)
 
 
 @cli.command('encrypt')
