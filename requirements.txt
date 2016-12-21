@@ -1,5 +1,6 @@
 clickclick
 requests
 stups-zign
+stups-pierone
 pystache
 zalando-kubectl>=0.8

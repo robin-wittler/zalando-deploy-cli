@@ -220,3 +220,15 @@ def test_encrypt(monkeypatch, mock_config):
     encrypt_call.assert_called_with(mock_config(), requests.post,
                                     mock_config().get('deploy_api') + '/secrets',
                                     json={'plaintext': 'my_secret'})
+
+
+def test_resolve_version(monkeypatch):
+    monkeypatch.setattr('zign.api.get_token', lambda a, b: 'mytok')
+    monkeypatch.setattr('pierone.api.get_latest_tag', lambda a, b: 'cd123')
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        with open('template.yaml', 'w') as fd:
+            yaml.dump({'spec': {'template': {'spec': {'containers': [{'image': 'myregistry.example.org/foo/bar:{{version}}'}]}}}}, fd)
+        result = runner.invoke(cli, ['resolve-version', 'template.yaml', 'my-app', 'latest', 'r1', 'replicas=3'], catch_exceptions=False)
+        print(result)
+    assert 'cd123' == result.output.strip()
