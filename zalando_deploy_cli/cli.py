@@ -11,6 +11,7 @@ import pystache
 import requests
 import stups_cli.config
 import yaml
+import pierone.api
 import zign.api
 from clickclick import AliasedGroup, error, info, print_table
 
@@ -23,6 +24,19 @@ APPLICATION_PATTERN = re.compile('^[a-z][a-z0-9-]*$')
 VERSION_PATTERN = re.compile('^[a-z0-9][a-z0-9.-]*$')
 
 DEFAULT_HTTP_TIMEOUT = 30  # seconds
+
+
+def find_latest_docker_image_version(image):
+    docker_image = pierone.api.DockerImage.parse(image)
+    if not docker_image.registry:
+        error('Could not resolve "latest" tag for {}: missing registry.'.format(image))
+        exit(2)
+    token = zign.api.get_token('uid', ['uid'])
+    latest_tag = pierone.api.get_latest_tag(docker_image, token)
+    if not latest_tag:
+        error('Could not resolve "latest" tag for {}'.format(image))
+        exit(2)
+    return latest_tag
 
 
 def validate_pattern(pattern):
@@ -198,6 +212,35 @@ def apply(config, template_or_directory, parameter, execute):
             approve_and_execute(config, change_request_id)
         else:
             print(change_request_id)
+
+
+@cli.command('resolve-version')
+@click.argument('template', type=click.File('r'))
+@application_argument
+@version_argument
+@release_argument
+@click.argument('parameter', nargs=-1)
+@click.pass_obj
+def resolve_version(config, template, application, version, release, parameter):
+    '''Resolve "latest" version if needed'''
+    if version != 'latest':
+        # return fixed version unchanged,
+        # nothing to resolve
+        print(version)
+        return
+    context = parse_parameters(parameter)
+    context['application'] = application
+    context['version'] = version
+    context['release'] = release
+    data = _render_template(template, context)
+    for container in data['spec']['template']['spec']['containers']:
+        image = container['image']
+        if image.endswith(':latest'):
+            latest_version = find_latest_docker_image_version(image)
+            print(latest_version)
+            return
+    error('Could not resolve "latest" version: No matching container found. Please choose a version != "latest".')
+    exit(2)
 
 
 @cli.command('create-deployment')
