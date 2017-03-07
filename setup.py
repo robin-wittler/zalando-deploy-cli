@@ -84,5 +84,6 @@ setup(
         'Intended Audience :: Developers',
         'Operating System :: OS Independent',
     ],
+    include_package_data=True,  # required to include YAML templates
     entry_points={'console_scripts': ['zdeploy = zalando_deploy_cli.cli:main']}
 )
