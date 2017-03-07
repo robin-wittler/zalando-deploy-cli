@@ -1,0 +1,17 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: "{{ application }}"
+  annotations:
+    # SSL certificate ARN to use for the ALB
+    # to find your correct ARN, use aws acm list-certificates or aws iam list-server-certificates
+    zalando.org/aws-load-balancer-ssl-cert: "arn:aws:acm:eu-central-1:123123123123:certificate/abcdefad-2f65-4b3a-8408-5b4ed3a33c1a"
+spec:
+  rules:
+    # DNS name your application should be exposed on
+    - host: "{{ application}}.foo.example.org"
+      http:
+        paths:
+          - backend:
+              serviceName: "{{ application }}"
+              servicePort: 80

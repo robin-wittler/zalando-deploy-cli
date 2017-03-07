@@ -5,15 +5,16 @@ import subprocess
 import sys
 import time
 import urllib.parse
+from pathlib import Path
 
 import click
+import pierone.api
 import pystache
 import requests
 import stups_cli.config
 import yaml
-import pierone.api
 import zign.api
-from clickclick import AliasedGroup, error, info, print_table
+from clickclick import Action, AliasedGroup, error, info, print_table
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
@@ -582,6 +583,45 @@ def encrypt(config):
     url = '{}/secrets'.format(api_url)
     response = request(config, requests.post, url, json={'plaintext': plain_text})
     print("deployment-secret:{}".format(response.json()['data']))
+
+
+def copy_template(template_path: Path, path: Path):
+    for d in template_path.iterdir():
+        target_path = path / d.relative_to(template_path)
+        if d.is_dir():
+            copy_template(d, target_path)
+        elif target_path.exists():
+            # better not overwrite any existing files!
+            raise click.UsageError('Target file "{}" already exists. Aborting!'.format(target_path))
+        else:
+            with Action('Writing {}..'.format(target_path)):
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                with d.open() as fd:
+                    contents = fd.read()
+                with target_path.open('w') as fd:
+                    fd.write(contents)
+
+
+@cli.command('init')
+@click.argument('directory', nargs=-1)
+@click.option('-t', '--template', help='Use a custom template (default: webapp)',
+              metavar='TEMPLATE_ID', default='webapp')
+@click.pass_obj
+def init(config, directory, template):
+    '''Initialize a new deploy folder with Kubernetes manifests'''
+    if directory:
+        path = Path(directory[0])
+    else:
+        path = Path('.')
+
+    template_path = Path(__file__).parent / 'templates' / template
+    copy_template(template_path, path)
+
+    print()
+
+    notes = path / 'NOTES.txt'
+    with notes.open() as fd:
+        print(fd.read())
 
 
 def main():
