@@ -1,3 +1,5 @@
 include *.txt
 include *.rst
 recursive-include zalando_deploy_cli *.py
+recursive-include zalando_deploy_cli *.yaml
+recursive-include zalando_deploy_cli *.txt
