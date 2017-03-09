@@ -1,0 +1,59 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: "{{ application }}-{{ version }}-{{ release }}"
+spec:
+  replicas: {{ replicas }}
+  template:
+    metadata:
+      labels:
+        application: "{{ application }}"
+        version: "{{ version }}"
+        release: "{{ release }}"
+        stage: production
+      ## OPTIONAL: AWS IAM role (must be created separately via CF) to use
+      # annotations:
+      #   iam.amazonaws.com/role: "app-{{ application }}"
+    spec:
+      containers:
+        - name: "{{ application }}"
+          image: "$image"
+          env:
+            # for JVM applications:
+            # set the maximum available memory as JVM would assume host/node capacity otherwise
+            # this is evaluated by java-dynamic-memory-opts in the Zalando OpenJDK base image
+            # see https://github.com/zalando/docker-openjdk
+            - name: MEM_TOTAL_KB
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+                  divisor: 1Ki
+            # TOKENINFO_URL was set automatically by Taupage AMI, please configure here if needed
+            - name: TOKENINFO_URL
+              value: "PLEASE_SET_THIS_VALUE_IF_NEEDED"
+            # CREDENTIALS_DIR was set automatically by Taupage AMI
+            - name: CREDENTIALS_DIR
+              value: "/meta/credentials"
+$env
+          ports:
+            - containerPort: $port
+          readinessProbe:
+            httpGet:
+              path: $health_check_path
+              port: $port
+          volumeMounts:
+            # provide OAuth credentials in CREDENTIALS_DIR
+            - name: "{{ application }}-credentials"
+              mountPath: /meta/credentials
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+            limits:
+              memory: $memory
+      volumes:
+        # mount the OAuth credentials
+        - name: "{{ application }}-credentials"
+          secret:
+            secretName: "{{ application }}"

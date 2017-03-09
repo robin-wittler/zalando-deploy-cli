@@ -7,7 +7,6 @@ kubernetes:
   # set the Kubernetes cluster ID (check with zkubectl list-clusters)
   cluster_id: $cluster_id
   namespace: default
-  # change the application ID:
-  application: nginx-hello-world
+  application: $application
   # number of pods to run
   replicas: 3

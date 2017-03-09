@@ -1,0 +1,14 @@
+Senza definition was converted, but:
+
+* OAuth credentials were not configured
+* TOKENINFO_URL was not set automatically
+* Horizontal Pod Autoscaling was not configured
+* DNS name and SSL cert were not configured (Ingress)
+* many TaupageConfig properties such as docker_daemon_access are not supported
+* any custom Senza CF resources or components were ignored
+
+Please review and change files as needed:
+
+* pipeline.yaml: AWS account ID, region, cluster ID and application ID
+* deployment.yaml: env vars, resources, ..
+* apply/ingress.yaml: DNS name, SSL certificate ARN

@@ -1,0 +1,40 @@
+# basic information for generating and executing this definition
+SenzaInfo:
+  StackName: hjacobs-helloworld
+  Parameters:
+    - ImageVersion:
+        Description: "Docker image version of hjacobs-helloworld."
+
+# a list of senza components to apply to the definition
+SenzaComponents:
+
+  # this basic configuration is required for the other components
+  - Configuration:
+      Type: Senza::StupsAutoConfiguration # auto-detect network setup
+
+  # will create a launch configuration and auto scaling group with scaling triggers
+  - AppServer:
+      Type: Senza::TaupageAutoScalingGroup
+      InstanceType: t2.micro
+      SecurityGroups:
+        - app-hjacobs-helloworld
+      IamRoles:
+        - app-hjacobs-helloworld
+      ElasticLoadBalancer: AppLoadBalancer
+      TaupageConfig:
+        application_version: "{{Arguments.ImageVersion}}"
+        runtime: Docker
+        source: "pierone.stups.zalan.do/mentoring/hjacobs-helloworld:{{Arguments.ImageVersion}}"
+        health_check_path: /health
+        ports:
+          8080: 8080
+        mint_bucket: "zalando-stups-mint-187355903146-eu-central-1"
+
+  # creates an ELB entry and Route53 domains to this ELB
+  - AppLoadBalancer:
+      Type: Senza::WeightedDnsElasticLoadBalancer
+      HTTPPort: 8080
+      HealthCheckPath: /health
+      SecurityGroups:
+        - app-hjacobs-helloworld-lb
+      Scheme: internet-facing
