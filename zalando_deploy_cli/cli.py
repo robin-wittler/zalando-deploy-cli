@@ -666,7 +666,7 @@ def read_senza_variables(fd):
 
 def prepare_variables(variables: dict):
     env = []
-    for key, val in sorted(variables['env'].items()):
+    for key, val in sorted(variables.get('env', {}).items()):
         env.append({'name': str(key), 'value': str(val)})
     # FIXME: the indent is hardcoded and depends on formatting of deployment.yaml :-(
     variables['env'] = textwrap.indent(yaml.dump(env, default_flow_style=False), ' ' * 12)
