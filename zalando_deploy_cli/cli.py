@@ -486,8 +486,6 @@ def apply_autoscaling(config, template, application, version, release, parameter
 @click.option('--execute', is_flag=True)
 def delete(config, type, resource, execute):
     '''Delete a Kubernetes resource or Cloud Formation stack'''
-    namespace = config.get('kubernetes_namespace')
-    kubectl_login(config)
 
     if type == 'kubernetes':
         parts = resource.split('/')
