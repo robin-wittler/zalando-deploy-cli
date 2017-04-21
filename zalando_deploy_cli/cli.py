@@ -479,6 +479,43 @@ def apply_autoscaling(config, template, application, version, release, parameter
         print(change_request_id)
 
 
+@cli.command('delete')
+@click.argument('type', type=click.Choice(['kubernetes', 'cloudformation']))
+@click.argument('resource')
+@click.pass_obj
+@click.option('--execute', is_flag=True)
+def delete(config, type, resource, execute):
+    '''Delete a Kubernetes resource or Cloud Formation stack'''
+
+    if type == 'kubernetes':
+        parts = resource.split('/')
+        if len(parts) != 2:
+            error('Kubernetes resource must be KIND/NAME')
+            raise click.Abort()
+
+        kind, name = parts
+
+        info('Deleting Kubernetes {} {}..'.format(kind, name))
+        cluster_id = config.get('kubernetes_cluster')
+        namespace = config.get('kubernetes_namespace')
+        path = '/kubernetes-clusters/{}/namespaces/{}/{}/{}'.format(
+            cluster_id, namespace, kind, name)
+    else:
+        info('Deleting Cloud Formation stack {}..'.format(resource))
+        aws_account = config.get('aws_account')
+        aws_region = config.get('aws_region')
+        path = '/aws-accounts/{}/regions/{}/cloudformation-stacks/{}'.format(
+            aws_account, aws_region, resource)
+
+    response = request(config, requests.delete, path)
+    change_request_id = response.json()['id']
+
+    if execute:
+        approve_and_execute(config, change_request_id)
+    else:
+        print(change_request_id)
+
+
 @cli.command('delete-old-deployments')
 @application_argument
 @version_argument
